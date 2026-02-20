@@ -1,33 +1,42 @@
-# Simple Makefile for testing PE parser without Qt
+# Simple Makefile for testing PE and VB parsers without Qt
 CXX = g++
 CXXFLAGS = -std=c++20 -Wall -Wextra -I./src -g
 LDFLAGS =
 
 # Source files
-PE_SOURCES = src/core/pe/PEFile.cpp
-TEST_SOURCES = src/test_pe.cpp
+CORE_SOURCES = src/core/pe/PEFile.cpp src/core/vb/VBFile.cpp
+TEST_PE_SOURCES = src/test_pe.cpp
+TEST_VB_SOURCES = src/test_vb.cpp
 
 # Object files
-PE_OBJECTS = $(PE_SOURCES:.cpp=.o)
-TEST_OBJECTS = $(TEST_SOURCES:.cpp=.o)
+CORE_OBJECTS = $(CORE_SOURCES:.cpp=.o)
+TEST_PE_OBJECTS = $(TEST_PE_SOURCES:.cpp=.o)
+TEST_VB_OBJECTS = $(TEST_VB_SOURCES:.cpp=.o)
 
-# Target
-TARGET = test_pe
+# Targets
+TARGET_PE = test_pe
+TARGET_VB = test_vb
 
-.PHONY: all clean test
+.PHONY: all clean test run_pe run_vb
 
-all: $(TARGET)
+all: $(TARGET_PE) $(TARGET_VB)
 
-$(TARGET): $(PE_OBJECTS) $(TEST_OBJECTS)
+$(TARGET_PE): $(CORE_OBJECTS) $(TEST_PE_OBJECTS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(TARGET_VB): $(CORE_OBJECTS) $(TEST_VB_OBJECTS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(PE_OBJECTS) $(TEST_OBJECTS) $(TARGET)
+	rm -f $(CORE_OBJECTS) $(TEST_PE_OBJECTS) $(TEST_VB_OBJECTS) $(TARGET_PE) $(TARGET_VB)
 
-test: $(TARGET)
-	./$(TARGET) "/home/admin/.wine/drive_c/Program Files (x86)/Brainhouse Labs/Phalanx/Phalanx.exe"
+run_pe: $(TARGET_PE)
+	./$(TARGET_PE) "/home/admin/.wine/drive_c/Program Files (x86)/Brainhouse Labs/Phalanx/Phalanx.exe"
 
-.PHONY: all clean test
+run_vb: $(TARGET_VB)
+	./$(TARGET_VB) "/home/admin/.wine/drive_c/Program Files (x86)/Brainhouse Labs/Phalanx/Phalanx.exe"
+
+test: all run_pe run_vb
