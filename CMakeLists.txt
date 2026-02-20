@@ -193,6 +193,25 @@ target_include_directories(test_decompiler PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+# End-to-end test (P-Code -> IR -> VB6)
+add_executable(test_e2e
+    tests/test_e2e.cpp
+    src/core/ir/IRType.cpp
+    src/core/ir/IRExpression.cpp
+    src/core/ir/IRStatement.cpp
+    src/core/ir/IRFunction.cpp
+    src/core/ir/PCodeLifter.cpp
+    src/core/disasm/pcode/PCodeInstruction.cpp
+    src/core/decompiler/TypeRecovery.cpp
+    src/core/decompiler/ControlFlowStructurer.cpp
+    src/core/decompiler/VBCodeGenerator.cpp
+    src/core/decompiler/Decompiler.cpp
+)
+
+target_include_directories(test_e2e PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 # Simple decompiler test
 add_executable(test_decompiler_simple
     tests/test_decompiler_simple.cpp
