@@ -1,6 +1,6 @@
 // VBDecompiler - Visual Basic Decompiler
 // Copyright (c) 2026 VBDecompiler Project
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #ifndef IRTYPE_H
 #define IRTYPE_H

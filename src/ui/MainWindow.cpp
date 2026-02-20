@@ -1,3 +1,7 @@
+// VBDecompiler - Visual Basic Decompiler
+// Copyright (c) 2026 VBDecompiler Project
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
 #include <QFileDialog>

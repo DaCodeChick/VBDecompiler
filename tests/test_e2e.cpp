@@ -1,6 +1,6 @@
 // VBDecompiler - Visual Basic Decompiler
 // Copyright (c) 2024 VBDecompiler Project
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
  * @brief End-to-End Decompilation Test
