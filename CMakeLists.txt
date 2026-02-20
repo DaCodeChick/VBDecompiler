@@ -39,6 +39,10 @@ set(CORE_SOURCES
     src/core/ir/IRStatement.cpp
     src/core/ir/IRFunction.cpp
     src/core/ir/PCodeLifter.cpp
+    src/core/decompiler/TypeRecovery.cpp
+    src/core/decompiler/ControlFlowStructurer.cpp
+    src/core/decompiler/VBCodeGenerator.cpp
+    src/core/decompiler/Decompiler.cpp
 )
 
 set(UI_SOURCES
@@ -169,6 +173,40 @@ add_executable(test_lifter
 )
 
 target_include_directories(test_lifter PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Decompiler test
+add_executable(test_decompiler
+    tests/test_decompiler.cpp
+    src/core/ir/IRType.cpp
+    src/core/ir/IRExpression.cpp
+    src/core/ir/IRStatement.cpp
+    src/core/ir/IRFunction.cpp
+    src/core/decompiler/TypeRecovery.cpp
+    src/core/decompiler/ControlFlowStructurer.cpp
+    src/core/decompiler/VBCodeGenerator.cpp
+    src/core/decompiler/Decompiler.cpp
+)
+
+target_include_directories(test_decompiler PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Simple decompiler test
+add_executable(test_decompiler_simple
+    tests/test_decompiler_simple.cpp
+    src/core/ir/IRType.cpp
+    src/core/ir/IRExpression.cpp
+    src/core/ir/IRStatement.cpp
+    src/core/ir/IRFunction.cpp
+    src/core/decompiler/TypeRecovery.cpp
+    src/core/decompiler/ControlFlowStructurer.cpp
+    src/core/decompiler/VBCodeGenerator.cpp
+    src/core/decompiler/Decompiler.cpp
+)
+
+target_include_directories(test_decompiler_simple PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
