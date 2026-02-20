@@ -79,7 +79,36 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
         const IRBasicBlock* bodyBlock = nullptr;
         const IRBasicBlock* exitBlock = nullptr;
         
-        // Try While loop (check before If/Then/Else since loops have back edges)
+        // Try Do-While loop first (self-loop pattern)
+        // Must check before While loop since both have back edges
+        if (matchDoWhileLoop(block, function, exitBlock)) {
+            auto doWhileNode = std::make_unique<StructuredNode>(StructuredNodeKind::DO_WHILE);
+            
+            // Get condition from branch statement (last statement in body)
+            const IRStatement* branchStmt = nullptr;
+            for (const auto& stmt : block->getStatements()) {
+                if (stmt->getKind() == IRStatementKind::BRANCH) {
+                    branchStmt = stmt.get();
+                    break;
+                }
+            }
+            
+            if (branchStmt) {
+                doWhileNode->setCondition(branchStmt->getCondition());
+            }
+            
+            // Add the body block to a SEQUENCE node
+            // The loop body includes all statements except the condition check
+            auto bodyNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
+            bodyNode->addBlock(block);
+            doWhileNode->addChild(std::move(bodyNode));
+            
+            root->addChild(std::move(doWhileNode));
+            processed.insert(block);
+            continue;
+        }
+        
+        // Try While loop (separate header and body blocks)
         if (matchWhileLoop(block, function, bodyBlock, exitBlock)) {
             auto whileNode = std::make_unique<StructuredNode>(StructuredNodeKind::WHILE);
             
@@ -366,6 +395,78 @@ bool ControlFlowStructurer::matchWhileLoop(
         exitBlock = succ1;
         return succ2IsBackEdge; // Only match if it's actually a loop
     }
+}
+
+bool ControlFlowStructurer::matchDoWhileLoop(
+    const IRBasicBlock* block,
+    const IRFunction& function,
+    const IRBasicBlock*& exitBlock
+) {
+    // Pattern for Do-While: 
+    // - Block has 2 successors
+    // - One successor is the block itself (back edge - loop continues)
+    // - Other successor is the exit block
+    // - Block has a BRANCH statement that tests the loop condition
+    
+    const auto& successors = block->getSuccessors();
+    if (successors.size() != 2) {
+        return false;
+    }
+    
+    // Check if block has statements
+    const auto& statements = block->getStatements();
+    if (statements.empty()) {
+        return false;
+    }
+    
+    // Look for a BRANCH statement
+    const IRStatement* branchStmt = nullptr;
+    for (const auto& stmt : statements) {
+        if (stmt->getKind() == IRStatementKind::BRANCH) {
+            branchStmt = stmt.get();
+            break;
+        }
+    }
+    
+    if (!branchStmt) {
+        return false;
+    }
+    
+    // Get the target of the BRANCH statement
+    uint32_t branchTargetId = branchStmt->getTargetBlockId();
+    
+    // Get the two successors
+    auto it = successors.begin();
+    uint32_t succ1Id = *it;
+    ++it;
+    uint32_t succ2Id = *it;
+    
+    const auto* succ1 = getBlockById(succ1Id, function);
+    const auto* succ2 = getBlockById(succ2Id, function);
+    
+    if (!succ1 || !succ2) {
+        return false;
+    }
+    
+    // Check if one successor is the block itself (loop back to same block)
+    bool succ1IsLoopBack = (succ1Id == block->getId());
+    bool succ2IsLoopBack = (succ2Id == block->getId());
+    
+    if (!succ1IsLoopBack && !succ2IsLoopBack) {
+        return false; // Not a Do-While if there's no self-loop
+    }
+    
+    // Determine which successor is the exit
+    // The branch target should loop back, the fallthrough should exit
+    if (succ1Id == branchTargetId && succ1IsLoopBack) {
+        exitBlock = succ2;
+        return true;
+    } else if (succ2Id == branchTargetId && succ2IsLoopBack) {
+        exitBlock = succ1;
+        return true;
+    }
+    
+    return false;
 }
 
 std::vector<const IRBasicBlock*> ControlFlowStructurer::getBlocksInPostOrder(const IRFunction& function) const {

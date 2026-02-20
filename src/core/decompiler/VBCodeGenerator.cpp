@@ -314,11 +314,22 @@ std::string VBCodeGenerator::generateBasicBlock(const IRBasicBlock* block, bool 
     for (size_t i = 0; i < count; i++) {
         const auto& stmt = statements[i];
         
-        // Skip last GOTO/BRANCH if requested (these are structural control flow)
-        if (skipStructuralJumps && i == count - 1) {
+        // Skip structural control flow statements (GOTO/BRANCH at end of block)
+        if (skipStructuralJumps) {
             IRStatementKind kind = stmt->getKind();
-            if (kind == IRStatementKind::GOTO || kind == IRStatementKind::BRANCH) {
+            
+            // Skip last statement if it's GOTO or BRANCH
+            if (i == count - 1 && (kind == IRStatementKind::GOTO || kind == IRStatementKind::BRANCH)) {
                 continue;
+            }
+            
+            // Skip second-to-last statement if it's BRANCH and last is GOTO
+            // This handles Do-While loops where condition (BRANCH) is followed by fallthrough (GOTO)
+            if (i == count - 2 && kind == IRStatementKind::BRANCH && count >= 2) {
+                const auto& lastStmt = statements[count - 1];
+                if (lastStmt->getKind() == IRStatementKind::GOTO) {
+                    continue;
+                }
             }
         }
         

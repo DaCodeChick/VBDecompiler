@@ -135,6 +135,12 @@ private:
         const IRBasicBlock*& exitBlock
     );
     
+    bool matchDoWhileLoop(
+        const IRBasicBlock* block,
+        const IRFunction& function,
+        const IRBasicBlock*& exitBlock
+    );
+    
     // CFG analysis helpers
     std::vector<const IRBasicBlock*> getBlocksInPostOrder(const IRFunction& function) const;
     std::unordered_set<const IRBasicBlock*> getDominators(

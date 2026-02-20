@@ -418,6 +418,76 @@ void testWhileLoop() {
     std::cout << "✓ Test 6 passed!\n\n";
 }
 
+/**
+ * @brief Test 7: Do-While loop
+ * 
+ * Function GetInput() As Integer
+ *     Dim value As Integer
+ *     Do
+ *         value = ReadValue()
+ *     Loop While value < 0
+ *     Return value
+ * End Function
+ */
+void testDoWhileLoop() {
+    std::cout << "Test 7: Do-While Loop\n";
+    std::cout << "=====================\n\n";
+    
+    IRFunction getInputFunc("GetInput", IRTypes::Integer);
+    getInputFunc.setAddress(0x00407000);
+    
+    // Local variable
+    IRVariable& value = getInputFunc.createLocalVariable("value", IRTypes::Integer);
+    
+    // Create basic blocks
+    IRBasicBlock& loopBodyBB = getInputFunc.createBasicBlock();
+    getInputFunc.setEntryBlock(loopBodyBB.getId());
+    
+    IRBasicBlock& exitBB = getInputFunc.createBasicBlock();
+    
+    // Loop body: value = ReadValue()
+    std::vector<std::unique_ptr<IRExpression>> args;
+    auto callExpr = IRExpression::makeCall("ReadValue", std::move(args), IRTypes::Integer);
+    auto assignStmt = IRStatement::makeAssign(value, std::move(callExpr));
+    loopBodyBB.addStatement(std::move(assignStmt));
+    
+    // Loop condition: value < 0
+    auto condValue = IRExpression::makeVariable(value);
+    auto condZero = IRExpression::makeConstant(IRConstant(static_cast<int64_t>(0)));
+    auto condExpr = IRExpression::makeBinary(
+        IRExpressionKind::LESS_THAN,
+        std::move(condValue),
+        std::move(condZero),
+        IRTypes::Boolean
+    );
+    
+    // Branch: if value < 0, loop back to body; otherwise exit
+    auto branchStmt = IRStatement::makeBranch(std::move(condExpr), loopBodyBB.getId());
+    loopBodyBB.addStatement(std::move(branchStmt));
+    
+    // Fallthrough to exit
+    auto gotoExit = IRStatement::makeGoto(exitBB.getId());
+    loopBodyBB.addStatement(std::move(gotoExit));
+    
+    // Exit block: Return value
+    auto returnExpr = IRExpression::makeVariable(value);
+    auto returnStmt = IRStatement::makeReturn(std::move(returnExpr));
+    exitBB.addStatement(std::move(returnStmt));
+    
+    // Setup CFG edges
+    getInputFunc.connectBlocks(loopBodyBB.getId(), loopBodyBB.getId()); // self-loop (back edge)
+    getInputFunc.connectBlocks(loopBodyBB.getId(), exitBB.getId());
+    
+    // Decompile (with structuring)
+    Decompiler decompiler;
+    std::string vbCode = decompiler.decompile(getInputFunc, true);
+    
+    std::cout << "Generated VB6 Code:\n";
+    std::cout << "-------------------\n";
+    std::cout << vbCode << "\n";
+    std::cout << "✓ Test 7 passed!\n\n";
+}
+
 int main() {
     std::cout << "VBDecompiler - Decompiler Test Suite\n";
     std::cout << "=====================================\n\n";
@@ -429,6 +499,7 @@ int main() {
         testMultipleTypes();
         testTypeCasting();
         testWhileLoop();
+        testDoWhileLoop();
         
         std::cout << "\n";
         std::cout << "====================================\n";
