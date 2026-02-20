@@ -1,5 +1,5 @@
 // VBDecompiler - Visual Basic Decompiler
-// Copyright (c) 2024 VBDecompiler Project
+// Copyright (c) 2026 VBDecompiler Project
 // SPDX-License-Identifier: MIT
 
 #include "Decompiler.h"
