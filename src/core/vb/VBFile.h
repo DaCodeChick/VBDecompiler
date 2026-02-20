@@ -149,6 +149,24 @@ public:
      * @brief Get object by name
      */
     [[nodiscard]] const VBObject* getObjectByName(const std::string& name) const;
+    
+    /**
+     * @brief Get P-Code bytes for a specific method in an object
+     * @param objectIndex Index of the object containing the method
+     * @param methodIndex Index of the method within the object
+     * @return P-Code bytes, or empty vector if not found/not P-Code
+     */
+    [[nodiscard]] std::vector<uint8_t> getPCodeForMethod(
+        uint32_t objectIndex, 
+        uint32_t methodIndex) const;
+    
+    /**
+     * @brief Get all methods' P-Code for an object
+     * @param objectIndex Index of the object
+     * @return Vector of P-Code byte arrays (one per method)
+     */
+    [[nodiscard]] std::vector<std::vector<uint8_t>> getAllPCodeForObject(
+        uint32_t objectIndex) const;
 
 private:
     bool findVBHeader();
@@ -167,7 +185,7 @@ private:
      * @return Optional containing the structure if successful
      */
     template<typename T>
-    std::optional<T> readStructAtRVA(uint32_t rva) {
+    std::optional<T> readStructAtRVA(uint32_t rva) const {
         auto data = peFile_->readAtRVA(rva, sizeof(T));
         if (data.size() < sizeof(T)) {
             return std::nullopt;

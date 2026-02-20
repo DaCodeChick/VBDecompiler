@@ -13,20 +13,26 @@
   <property name="windowTitle">
    <string>VBDecompiler</string>
   </property>
-  <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout">
-    <item>
-     <widget class="QLabel" name="labelPlaceholder">
-      <property name="text">
-       <string>VBDecompiler - Open a VB executable to begin analysis</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
-    </item>
-   </layout>
-  </widget>
+   <widget class="QWidget" name="centralwidget">
+    <layout class="QVBoxLayout" name="verticalLayout">
+     <item>
+      <widget class="QTextEdit" name="codeEditor">
+       <property name="readOnly">
+        <bool>true</bool>
+       </property>
+       <property name="font">
+        <font>
+         <family>Monospace</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="placeholderText">
+        <string>VBDecompiler - Open a VB executable to begin analysis (Ctrl+O)</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>

@@ -174,6 +174,89 @@ const VBObject* VBFile::getObjectByName(const std::string& name) const {
     return nullptr;
 }
 
+std::vector<uint8_t> VBFile::getPCodeForMethod(uint32_t objectIndex, uint32_t methodIndex) const {
+    // Verify valid state
+    if (!valid_ || !isPCode()) {
+        return {};
+    }
+    
+    // Verify object index
+    if (objectIndex >= objects_.size()) {
+        return {};
+    }
+    
+    const auto& obj = objects_[objectIndex];
+    
+    // Verify object has info and methods pointer
+    if (!obj.info || obj.info->lpMethods == 0) {
+        return {};
+    }
+    
+    // Verify method index
+    if (methodIndex >= obj.info->wMethodCount) {
+        return {};
+    }
+    
+    // Read method table entry
+    // The lpMethods pointer points to an array of procedure descriptors
+    uint32_t methodTableRVA = vaToRVA(obj.info->lpMethods);
+    uint32_t procDescRVA = methodTableRVA + (methodIndex * sizeof(VBProcDescInfo));
+    
+    auto procDescOpt = readStructAtRVA<VBProcDescInfo>(procDescRVA);
+    if (!procDescOpt) {
+        return {};
+    }
+    
+    // The P-Code immediately follows the VBProcDescInfo structure
+    uint32_t pcodeRVA = procDescRVA + sizeof(VBProcDescInfo);
+    uint16_t pcodeSize = procDescOpt->wProcSize;
+    
+    if (pcodeSize == 0) {
+        return {};
+    }
+    
+    // Read P-Code bytes
+    auto pcodeBytes = peFile_->readAtRVA(pcodeRVA, pcodeSize);
+    
+    // Convert std::vector<std::byte> to std::vector<uint8_t>
+    std::vector<uint8_t> result;
+    result.reserve(pcodeBytes.size());
+    for (auto byte : pcodeBytes) {
+        result.push_back(static_cast<uint8_t>(byte));
+    }
+    
+    return result;
+}
+
+std::vector<std::vector<uint8_t>> VBFile::getAllPCodeForObject(uint32_t objectIndex) const {
+    std::vector<std::vector<uint8_t>> result;
+    
+    // Verify valid state
+    if (!valid_ || !isPCode()) {
+        return result;
+    }
+    
+    // Verify object index
+    if (objectIndex >= objects_.size()) {
+        return result;
+    }
+    
+    const auto& obj = objects_[objectIndex];
+    
+    // Verify object has info
+    if (!obj.info) {
+        return result;
+    }
+    
+    // Extract P-Code for each method
+    result.reserve(obj.info->wMethodCount);
+    for (uint16_t i = 0; i < obj.info->wMethodCount; ++i) {
+        result.push_back(getPCodeForMethod(objectIndex, i));
+    }
+    
+    return result;
+}
+
 bool VBFile::parseVBHeader() {
     auto headerOpt = readStructAtRVA<VBHeader>(vbHeaderRVA_);
     if (!headerOpt) {
