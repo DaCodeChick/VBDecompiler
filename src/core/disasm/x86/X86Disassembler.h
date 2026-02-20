@@ -68,6 +68,16 @@ private:
                             uint8_t mod, uint8_t rm, uint8_t operandSize,
                             X86Operand& operand);
     
+    // Operand creation helpers (RDSS: eliminate duplication)
+    static X86Operand makeRegisterOperand(X86Register reg, uint8_t size);
+    static X86Operand makeImmediateOperand(uint32_t value, uint8_t size);
+    
+    // High-level ModR/M decoding helpers (RDSS: simplify common patterns)
+    bool decodeModRMtoRegOperands(std::span<const uint8_t> data, size_t& offset,
+                                   uint8_t size, X86Operand& dst, X86Operand& src);
+    bool decodeRegtoModRMOperands(std::span<const uint8_t> data, size_t& offset,
+                                   uint8_t size, X86Operand& dst, X86Operand& src);
+    
     // Instruction decoders for specific opcodes
     bool decodeMov(std::span<const uint8_t> data, size_t& offset, 
                    X86Instruction& instr, uint8_t opcode);

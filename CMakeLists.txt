@@ -26,6 +26,7 @@ set(CORE_SOURCES
     src/core/disasm/x86/X86Instruction.cpp
     src/core/disasm/x86/X86Disassembler.cpp
     src/core/disasm/x86/X86DecoderHelpers.cpp
+    src/core/disasm/x86/X86DecoderHelpers2.cpp
     src/core/disasm/x86/X86DecoderData.cpp
     src/core/disasm/x86/X86DecoderControl.cpp
     src/core/disasm/x86/X86DecoderArithmetic.cpp
@@ -104,6 +105,7 @@ add_executable(test_x86
     src/core/disasm/x86/X86Instruction.cpp
     src/core/disasm/x86/X86Disassembler.cpp
     src/core/disasm/x86/X86DecoderHelpers.cpp
+    src/core/disasm/x86/X86DecoderHelpers2.cpp
     src/core/disasm/x86/X86DecoderData.cpp
     src/core/disasm/x86/X86DecoderControl.cpp
     src/core/disasm/x86/X86DecoderArithmetic.cpp
