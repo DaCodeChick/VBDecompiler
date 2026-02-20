@@ -14,6 +14,10 @@ When working on code in this project, always apply the **RDSS principles**:
 - Use meaningful variable and function names
 - Follow consistent naming conventions across the codebase
 - Prefer composition over inheritance where appropriate
+- **Use C++23 features first** - If C++23 has something we can use, use it. Do not fall back to earlier standards
+- **NEVER use raw pointers or arrays** - Make use of the STL for memory safety (`std::unique_ptr`, `std::shared_ptr`, `std::vector`, `std::array`, `std::span`)
+- **Always prefer C++ STL over plain C standard library** - This is 2026, not 1998. The code should reflect the modern day
+- **Use modern C++23 idioms**: `std::optional`, `std::expected`, `std::ranges`, `std::views`, structured bindings, `contains()` for sets/maps
 
 ### 2. **Despaghettify** - Untangle Complex Logic
 - Break down deeply nested conditionals into separate functions
@@ -168,9 +172,26 @@ X86DecoderHelpers.cpp            (~150 lines)
 
 ## Implementation Standards
 
-### C++ Standards
-- **Language**: C++23 only
-- **Standard types**: Use `std::` types (`uint8_t`, `std::span`, etc.)
+### C++ Standards (2026)
+- **Language**: C++23 only - use the latest standard features
+- **Year**: This is 2026, not 2024 - update copyright headers and documentation accordingly
+- **Standard types**: Use `std::` types (`uint8_t`, `std::span`, `std::optional`, etc.)
+- **Memory safety**: NEVER use raw pointers or C-style arrays
+  - Use `std::unique_ptr` / `std::shared_ptr` for ownership
+  - Use `std::vector` / `std::array` for collections
+  - Use `std::span` for non-owning views
+  - Use `std::reference_wrapper` instead of raw pointer references
+- **Modern idioms**: 
+  - Use `.contains()` instead of `.find() != .end()` for set/map membership tests (C++20)
+  - Use `std::ranges` and `std::views` for algorithms (C++20/23)
+  - Use structured bindings for multi-value returns
+  - Use `std::expected` for error handling (C++23)
+  - Use `std::optional` for nullable values
+- **C++ STL over C stdlib**: Always prefer C++ alternatives
+  - Use `std::string` not `char*`
+  - Use `std::vector` not `malloc/new[]`
+  - Use `<cmath>` not `<math.h>`
+  - Use `std::unique_ptr` not `new/delete`
 - **Qt types**: Only for Qt-specific APIs (UI, QFile, QDataStream)
 - **Core engine**: Keep Qt-independent where possible
 
@@ -211,9 +232,81 @@ Before committing refactored code, verify:
 
 ---
 
+## Memory Safety & Modern C++ (2026)
+
+### Never Use These (Banned Patterns):
+```cpp
+❌ int* ptr = new int;                    // Use std::unique_ptr<int>
+❌ int arr[100];                          // Use std::array<int, 100>
+❌ void func(int* data, size_t len);     // Use std::span<int>
+❌ char* str = malloc(100);               // Use std::string or std::vector<char>
+❌ if (map.find(x) != map.end())         // Use map.contains(x)
+❌ delete ptr;                            // Let smart pointers handle it
+❌ memset(arr, 0, sizeof(arr));          // Use std::fill or value-initialization
+```
+
+### Always Use These (Modern Alternatives):
+```cpp
+✅ auto ptr = std::make_unique<int>();                    // Unique ownership
+✅ auto arr = std::array<int, 100>{};                     // Fixed-size array
+✅ void func(std::span<int> data);                        // Non-owning view
+✅ auto str = std::string{};                              // Dynamic string
+✅ if (map.contains(x))                                   // C++20 contains()
+✅ // Smart pointers auto-cleanup                         // RAII
+✅ std::ranges::fill(arr, 0);                             // C++20 ranges
+✅ auto vec = std::vector<int>(100);                      // Dynamic array
+✅ auto result = std::expected<T, Error>{};               // C++23 error handling
+✅ auto opt = std::optional<int>{};                       // Nullable value
+✅ auto [key, value] = *map.find(x);                      // Structured bindings
+```
+
+### Smart Pointer Guidelines:
+- **`std::unique_ptr<T>`**: Exclusive ownership, no sharing
+  - Use by default for owned heap objects
+  - `auto obj = std::make_unique<MyClass>(args...);`
+- **`std::shared_ptr<T>`**: Shared ownership with reference counting
+  - Use sparingly - only when true sharing is needed
+  - `auto obj = std::make_shared<MyClass>(args...);`
+- **`std::weak_ptr<T>`**: Non-owning observer of `shared_ptr`
+  - Use to break circular references
+- **Raw pointers**: Only for non-owning observation (prefer `std::reference_wrapper` or `T*`)
+  - NEVER store raw pointers in containers for comparison/tracking
+  - Use IDs or indices instead
+
+### Container Best Practices:
+```cpp
+// ✅ Good: ID-based tracking (stable, safe)
+std::unordered_set<uint32_t> visitedIds;
+visitedIds.insert(block->getId());
+if (visitedIds.contains(blockId)) { ... }
+
+// ❌ Bad: Pointer-based tracking (unstable, dangerous)
+std::unordered_set<const Block*> visited;  // Pointers can be invalidated!
+visited.insert(block);
+if (visited.find(block) != visited.end()) { ... }  // Old-style too!
+
+// ✅ Good: Modern iteration with ranges
+for (const auto& [key, value] : map) {  // Structured binding
+    processItem(key, value);
+}
+
+// ✅ Good: Filtering with views (C++20)
+auto evenNumbers = numbers 
+    | std::views::filter([](int n) { return n % 2 == 0; })
+    | std::views::transform([](int n) { return n * 2; });
+
+// ✅ Good: Safe array access
+std::span<const uint8_t> safeView(data, size);
+if (safeView.size() >= 4) {
+    uint32_t value = safeView[0];  // Bounds-checkable
+}
+```
+
+---
+
 ## Examples of Good Refactoring
 
-### Before (Spaghetti):
+### Before (Spaghetti - Old C++98 Style):
 ```cpp
 bool decode(uint8_t* data, size_t len, Instruction& out) {
     if (len < 1) return false;
@@ -221,12 +314,12 @@ bool decode(uint8_t* data, size_t len, Instruction& out) {
     if (op == 0x68) {
         if (len < 5) return false;
         out.type = PUSH;
-        out.imm = *(uint32_t*)(data+1);
+        out.imm = *(uint32_t*)(data+1);  // UNSAFE! Raw pointer arithmetic
         return true;
     } else if (op == 0xE8) {
         if (len < 5) return false;
         out.type = CALL;
-        out.offset = *(int32_t*)(data+1);
+        out.offset = *(int32_t*)(data+1);  // UNSAFE!
         return true;
     } else if (op >= 0x50 && op <= 0x57) {
         out.type = PUSH;
@@ -237,48 +330,74 @@ bool decode(uint8_t* data, size_t len, Instruction& out) {
 }
 ```
 
-### After (Clean):
+### After (Clean - Modern C++23):
 ```cpp
-bool decode(std::span<const uint8_t> data, Instruction& out) {
-    if (data.empty()) return false;
+std::optional<Instruction> decode(std::span<const uint8_t> data) {
+    if (data.empty()) {
+        return std::nullopt;
+    }
     
     uint8_t opcode = data[0];
-    size_t offset = 1;
+    auto remaining = data.subspan(1);
     
-    // Dispatch to specialized decoders
+    // Dispatch to specialized decoders (early returns reduce nesting)
     if (opcode == 0x68 || opcode == 0x6A) {
-        return decodePushImmediate(data, offset, out, opcode);
+        return decodePushImmediate(remaining, opcode);
     }
     if (opcode == 0xE8) {
-        return decodeCallNear(data, offset, out);
+        return decodeCallNear(remaining);
     }
     if (opcode >= 0x50 && opcode <= 0x57) {
-        return decodePushRegister(data, offset, out, opcode);
+        return decodePushRegister(opcode);
     }
     
     // ... dispatch to other decoders
-    return false;
+    return std::nullopt;
 }
 
-bool decodePushImmediate(std::span<const uint8_t> data, size_t& offset,
-                         Instruction& out, uint8_t opcode) {
+std::optional<Instruction> decodePushImmediate(std::span<const uint8_t> data,
+                                                uint8_t opcode) {
+    Instruction out;
     out.setOpcode(Opcode::PUSH);
     
     if (opcode == 0x68) {
         // PUSH imm32
-        uint32_t imm;
-        if (!readDword(data, offset, imm)) return false;
-        out.addImmediateOperand(imm, 4);
+        if (auto imm = readDword(data)) {  // C++17 if-with-initializer
+            out.addImmediateOperand(*imm, 4);
+            return out;
+        }
     } else {
         // PUSH imm8
-        uint8_t imm;
-        if (!readByte(data, offset, imm)) return false;
-        out.addImmediateOperand(static_cast<int32_t>(static_cast<int8_t>(imm)), 1);
+        if (auto imm = readByte(data)) {
+            out.addImmediateOperand(static_cast<int32_t>(static_cast<int8_t>(*imm)), 1);
+            return out;
+        }
     }
     
-    return true;
+    return std::nullopt;
+}
+
+// Helper using std::optional instead of bool+out-param
+std::optional<uint32_t> readDword(std::span<const uint8_t> data) {
+    if (data.size() < 4) {
+        return std::nullopt;
+    }
+    
+    // Safe: no pointer arithmetic, bounds-checked via span
+    uint32_t value = 0;
+    std::memcpy(&value, data.data(), sizeof(uint32_t));
+    return value;
 }
 ```
+
+**Key improvements in modern version:**
+- ✅ No raw pointers - uses `std::span` for safe array views
+- ✅ Uses `std::optional` for nullable returns (C++17)
+- ✅ Bounds checking via span - no buffer overflows
+- ✅ Early returns reduce nesting depth
+- ✅ Clear separation of concerns
+- ✅ Type-safe with no pointer arithmetic
+- ✅ Modern error handling (optional vs bool+out-param)
 
 ---
 
