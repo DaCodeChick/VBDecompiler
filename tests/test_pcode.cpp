@@ -31,14 +31,14 @@ int main(int argc, char* argv[]) {
     std::cout << "Starting at RVA: 0x" << std::hex << std::uppercase << rva << std::dec << std::endl << std::endl;
 
     // Parse PE file
-    auto peFile = std::make_shared<PEFile>(filePath);
+    auto peFile = std::make_unique<PEFile>(filePath);
     if (!peFile->parse()) {
         std::cerr << "Error parsing PE: " << peFile->getLastError() << std::endl;
         return 1;
     }
 
-    // Parse VB structures
-    VBFile vbFile(peFile);
+    // Parse VB structures (transfer ownership)
+    VBFile vbFile(std::move(peFile));
     if (!vbFile.parse()) {
         std::cerr << "Error parsing VB structures: " << vbFile.getLastError() << std::endl;
         return 1;

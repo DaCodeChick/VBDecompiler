@@ -2,6 +2,7 @@
 #define VBSTRUCTURES_H
 
 #include <cstdint>
+#include <cstddef>
 
 namespace VBDecompiler {
 
@@ -213,6 +214,17 @@ struct VBMethodName {
 };  // Size: 0x08 (8 bytes)
 
 #pragma pack(pop)
+
+// Structure size constants (for validation and safety checks)
+constexpr size_t VB_HEADER_SIZE = 104;
+constexpr size_t VB_PROJECT_INFO_SIZE = 564;
+constexpr size_t VB_OBJECT_TABLE_HEADER_SIZE = 60;
+constexpr size_t VB_PUBLIC_OBJECT_DESCRIPTOR_SIZE = 48;
+constexpr size_t VB_OBJECT_INFO_SIZE = 56;
+constexpr size_t VB_OPTIONAL_OBJECT_INFO_SIZE = 64;
+constexpr size_t VB_PROC_DESC_INFO_SIZE = 30;
+constexpr size_t VB_CONTROL_INFO_SIZE = 44;
+constexpr size_t VB_METHOD_NAME_SIZE = 8;
 
 // Constants
 constexpr char VB5_MAGIC[4] = {'V', 'B', '5', '!'};

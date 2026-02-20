@@ -50,9 +50,9 @@ class VBFile {
 public:
     /**
      * @brief Construct a VBFile from a PE file
-     * @param peFile Parsed PE file
+     * @param peFile Parsed PE file (takes ownership)
      */
-    explicit VBFile(std::shared_ptr<PEFile> peFile);
+    explicit VBFile(std::unique_ptr<PEFile> peFile);
 
     /**
      * @brief Parse the VB structures
@@ -121,7 +121,7 @@ public:
     /**
      * @brief Get the underlying PE file
      */
-    [[nodiscard]] std::shared_ptr<PEFile> getPEFile() const { return peFile_; }
+    [[nodiscard]] const PEFile* getPEFile() const { return peFile_.get(); }
 
     /**
      * @brief Get last error message
@@ -188,7 +188,7 @@ private:
 
     void setError(const std::string& error);
 
-    std::shared_ptr<PEFile> peFile_;
+    std::unique_ptr<PEFile> peFile_;
     bool valid_ = false;
     bool hasVBHeader_ = false;
     bool isNativeCode_ = false;

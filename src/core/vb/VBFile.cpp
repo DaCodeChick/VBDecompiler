@@ -6,7 +6,7 @@
 
 namespace VBDecompiler {
 
-VBFile::VBFile(std::shared_ptr<PEFile> peFile)
+VBFile::VBFile(std::unique_ptr<PEFile> peFile)
     : peFile_(std::move(peFile))
 {
 }
