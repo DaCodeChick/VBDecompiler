@@ -123,6 +123,15 @@ bool X86Disassembler::decodeSIB(std::span<const uint8_t> data, size_t& offset,
 // Memory Operand Decoding
 // ============================================================================
 
+// Helper: Apply SIB byte to operand (RDSS: eliminate duplication)
+void X86Disassembler::applySIBToOperand(uint8_t scale, uint8_t index, uint8_t base, X86Operand& operand) {
+    operand.base = getReg32(base);
+    if (index != 4) {  // ESP can't be index
+        operand.index = getReg32(index);
+        operand.scale = 1 << scale;  // Convert to 1, 2, 4, 8
+    }
+}
+
 // Decode memory operand from ModR/M byte
 bool X86Disassembler::decodeMemoryOperand(std::span<const uint8_t> data, size_t& offset,
                                            uint8_t mod, uint8_t rm, uint8_t operandSize,
@@ -180,12 +189,7 @@ bool X86Disassembler::decodeMemoryOperand(std::span<const uint8_t> data, size_t&
         if (hasSIB) {
             uint8_t scale, index, base;
             if (!decodeSIB(data, offset, scale, index, base)) return false;
-            
-            operand.base = getReg32(base);
-            if (index != 4) {
-                operand.index = getReg32(index);
-                operand.scale = 1 << scale;
-            }
+            applySIBToOperand(scale, index, base, operand);
         }
         else {
             operand.base = getReg32(rm);
@@ -200,12 +204,7 @@ bool X86Disassembler::decodeMemoryOperand(std::span<const uint8_t> data, size_t&
         if (hasSIB) {
             uint8_t scale, index, base;
             if (!decodeSIB(data, offset, scale, index, base)) return false;
-            
-            operand.base = getReg32(base);
-            if (index != 4) {
-                operand.index = getReg32(index);
-                operand.scale = 1 << scale;
-            }
+            applySIBToOperand(scale, index, base, operand);
         }
         else {
             operand.base = getReg32(rm);

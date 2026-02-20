@@ -68,6 +68,9 @@ private:
                             uint8_t mod, uint8_t rm, uint8_t operandSize,
                             X86Operand& operand);
     
+    // Helper to apply SIB byte to operand (RDSS: eliminate duplication)
+    void applySIBToOperand(uint8_t scale, uint8_t index, uint8_t base, X86Operand& operand);
+    
     // Operand creation helpers (RDSS: eliminate duplication)
     static X86Operand makeRegisterOperand(X86Register reg, uint8_t size);
     static X86Operand makeImmediateOperand(uint32_t value, uint8_t size);
