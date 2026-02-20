@@ -310,28 +310,47 @@ bool ControlFlowStructurer::matchIfThenElse(
     }
     
     // The branch target is the "then" block, the other is the "else" block
+    const IRBasicBlock* candidateThen = nullptr;
+    const IRBasicBlock* candidateElse = nullptr;
+    
     if (succ1Id == branchTargetId) {
-        thenBlock = succ1;
-        elseBlock = succ2;
+        candidateThen = succ1;
+        candidateElse = succ2;
     } else {
-        thenBlock = succ2;
-        elseBlock = succ1;
+        candidateThen = succ2;
+        candidateElse = succ1;
+    }
+    
+    // Key insight: If the then block's ONLY successor is the "else" block,
+    // then the "else" block is actually the merge point, not an else branch.
+    // This is an If-Then pattern, not If-Then-Else.
+    const auto& thenSuccs = candidateThen->getSuccessors();
+    if (thenSuccs.size() == 1 && thenSuccs.find(candidateElse->getId()) != thenSuccs.end()) {
+        // Then block jumps directly to "else" block - this is If-Then
+        return false;
     }
     
     // Try to find merge block (common successor)
-    const auto& thenSuccs = thenBlock->getSuccessors();
-    const auto& elseSuccs = elseBlock->getSuccessors();
+    const auto& elseSuccs = candidateElse->getSuccessors();
     
     for (uint32_t thenSuccId : thenSuccs) {
         for (uint32_t elseSuccId : elseSuccs) {
             if (thenSuccId == elseSuccId) {
+                // Found a common successor - this is the merge block
+                thenBlock = candidateThen;
+                elseBlock = candidateElse;
                 mergeBlock = getBlockById(thenSuccId, function);
                 return true;
             }
         }
     }
     
-    // No merge block found - still valid if one branch is empty
+    // No merge block found - this is still valid If-Then-Else if both branches
+    // have meaningful content (e.g., both return or exit differently)
+    // Accept it as If-Then-Else with no merge
+    thenBlock = candidateThen;
+    elseBlock = candidateElse;
+    mergeBlock = nullptr;
     return true;
 }
 
@@ -348,28 +367,47 @@ bool ControlFlowStructurer::matchIfThen(
         return false;
     }
     
-    // Check if last statement is a branch
+    // Check if block has statements
     if (block->getStatements().empty()) {
         return false;
     }
     
-    const auto* lastStmt = block->getStatements().back().get();
-    if (lastStmt->getKind() != IRStatementKind::BRANCH) {
+    // Look for BRANCH statement to determine which successor is the then block
+    const IRStatement* branchStmt = nullptr;
+    for (const auto& stmt : block->getStatements()) {
+        if (stmt->getKind() == IRStatementKind::BRANCH) {
+            branchStmt = stmt.get();
+            break;
+        }
+    }
+    
+    if (!branchStmt) {
         return false;
     }
     
+    // Get branch target (this is the then block)
+    uint32_t branchTargetId = branchStmt->getTargetBlockId();
+    
     auto it = successors.begin();
-    const auto* succ1 = getBlockById(*it, function);
+    uint32_t succ1Id = *it;
     ++it;
-    const auto* succ2 = getBlockById(*it, function);
+    uint32_t succ2Id = *it;
+    
+    const auto* succ1 = getBlockById(succ1Id, function);
+    const auto* succ2 = getBlockById(succ2Id, function);
     
     if (!succ1 || !succ2) {
         return false;
     }
     
-    // Heuristic: branch target is then block, fall-through is merge
-    thenBlock = succ1;
-    mergeBlock = succ2;
+    // Branch target is then block, the other is the merge/fallthrough
+    if (succ1Id == branchTargetId) {
+        thenBlock = succ1;
+        mergeBlock = succ2;
+    } else {
+        thenBlock = succ2;
+        mergeBlock = succ1;
+    }
     
     return true;
 }
