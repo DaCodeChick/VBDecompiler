@@ -1,6 +1,6 @@
 #include "PEFile.h"
-#include "../../utils/ByteReader.h"
-#include <fstream>
+#include <QFile>
+#include <QDataStream>
 #include <algorithm>
 #include <cstring>
 
@@ -12,21 +12,19 @@ PEFile::PEFile(const std::filesystem::path& path)
 }
 
 bool PEFile::parse() {
-    // Read entire file into memory
-    std::ifstream file(path_, std::ios::binary | std::ios::ate);
-    if (!file) {
+    // Read entire file into memory using Qt
+    QFile file(QString::fromStdString(path_.string()));
+    if (!file.open(QIODevice::ReadOnly)) {
         setError("Failed to open file: " + path_.string());
         return false;
     }
 
-    auto fileSize = file.tellg();
-    file.seekg(0, std::ios::beg);
+    QByteArray fileBytes = file.readAll();
+    file.close();
 
-    fileData_.resize(static_cast<size_t>(fileSize));
-    if (!file.read(reinterpret_cast<char*>(fileData_.data()), fileSize)) {
-        setError("Failed to read file");
-        return false;
-    }
+    // Convert QByteArray to std::vector<std::byte>
+    fileData_.resize(fileBytes.size());
+    std::memcpy(fileData_.data(), fileBytes.data(), fileBytes.size());
 
     // Parse PE structures
     if (!parseDOSHeader()) return false;
