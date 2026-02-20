@@ -113,6 +113,7 @@ private:
     bool readString(std::span<const uint8_t> data, size_t& offset, std::string& value);
     
     // Utility functions
+    PCodeType tryParseTypeChar(std::span<const uint8_t> data, size_t& offset, PCodeType defaultType);
     void setError(const std::string& error);
     
     std::string lastError_;

@@ -222,6 +222,22 @@ bool PCodeDisassembler::decodeOperands(
 // Operand Decoders
 // ============================================================================
 
+// Helper: Try to parse optional type character after an operand
+// Returns the parsed type, or defaultType if no type character found
+PCodeType PCodeDisassembler::tryParseTypeChar(
+    std::span<const uint8_t> data, size_t& offset, PCodeType defaultType) {
+    
+    if (offset < data.size()) {
+        char typeChar = static_cast<char>(data[offset]);
+        if (typeChar == '%' || typeChar == '&' || typeChar == '!' || 
+            typeChar == '~' || typeChar == 'z' || typeChar == '?') {
+            offset++;  // Consume the type character
+            return parseTypeChar(typeChar);
+        }
+    }
+    return defaultType;
+}
+
 bool PCodeDisassembler::decodeOperandByte(
     std::span<const uint8_t> data, size_t& offset, PCodeInstruction& instr) {
     
@@ -230,13 +246,7 @@ bool PCodeDisassembler::decodeOperandByte(
         setError("Failed to read byte operand");
         return false;
     }
-    
-    instr.addOperand(PCodeOperand(
-        PCodeOperandType::BYTE,
-        value,
-        PCodeType::BYTE
-    ));
-    
+    instr.addOperand(PCodeOperand(PCodeOperandType::BYTE, value, PCodeType::BYTE));
     return true;
 }
 
@@ -248,13 +258,7 @@ bool PCodeDisassembler::decodeOperandInt16(
         setError("Failed to read int16 operand");
         return false;
     }
-    
-    instr.addOperand(PCodeOperand(
-        PCodeOperandType::INT16,
-        value,
-        PCodeType::INTEGER
-    ));
-    
+    instr.addOperand(PCodeOperand(PCodeOperandType::INT16, value, PCodeType::INTEGER));
     return true;
 }
 
@@ -266,13 +270,7 @@ bool PCodeDisassembler::decodeOperandInt32(
         setError("Failed to read int32 operand");
         return false;
     }
-    
-    instr.addOperand(PCodeOperand(
-        PCodeOperandType::INT32,
-        value,
-        PCodeType::LONG
-    ));
-    
+    instr.addOperand(PCodeOperand(PCodeOperandType::INT32, value, PCodeType::LONG));
     return true;
 }
 
@@ -284,13 +282,7 @@ bool PCodeDisassembler::decodeOperandFloat(
         setError("Failed to read float operand");
         return false;
     }
-    
-    instr.addOperand(PCodeOperand(
-        PCodeOperandType::FLOAT,
-        value,
-        PCodeType::SINGLE
-    ));
-    
+    instr.addOperand(PCodeOperand(PCodeOperandType::FLOAT, value, PCodeType::SINGLE));
     return true;
 }
 
@@ -302,13 +294,7 @@ bool PCodeDisassembler::decodeOperandString(
         setError("Failed to read string operand");
         return false;
     }
-    
-    instr.addOperand(PCodeOperand(
-        PCodeOperandType::STRING,
-        value,
-        PCodeType::STRING
-    ));
-    
+    instr.addOperand(PCodeOperand(PCodeOperandType::STRING, value, PCodeType::STRING));
     return true;
 }
 
@@ -321,23 +307,8 @@ bool PCodeDisassembler::decodeOperandArgument(
         return false;
     }
     
-    // Check for type character
-    PCodeType dataType = PCodeType::VARIANT;
-    if (offset < data.size()) {
-        char typeChar = static_cast<char>(data[offset]);
-        if (typeChar == '%' || typeChar == '&' || typeChar == '!' || 
-            typeChar == '~' || typeChar == 'z' || typeChar == '?') {
-            dataType = parseTypeChar(typeChar);
-            offset++;
-        }
-    }
-    
-    instr.addOperand(PCodeOperand(
-        PCodeOperandType::ARGUMENT,
-        index,
-        dataType
-    ));
-    
+    PCodeType dataType = tryParseTypeChar(data, offset, PCodeType::VARIANT);
+    instr.addOperand(PCodeOperand(PCodeOperandType::ARGUMENT, index, dataType));
     return true;
 }
 
@@ -349,13 +320,7 @@ bool PCodeDisassembler::decodeOperandControl(
         setError("Failed to read control index");
         return false;
     }
-    
-    instr.addOperand(PCodeOperand(
-        PCodeOperandType::CONTROL,
-        index,
-        PCodeType::OBJECT
-    ));
-    
+    instr.addOperand(PCodeOperand(PCodeOperandType::CONTROL, index, PCodeType::OBJECT));
     return true;
 }
 
@@ -368,42 +333,20 @@ bool PCodeDisassembler::decodeOperandLocal(
         return false;
     }
     
-    // Check for type character
-    PCodeType dataType = PCodeType::VARIANT;
-    if (offset < data.size()) {
-        char typeChar = static_cast<char>(data[offset]);
-        if (typeChar == '%' || typeChar == '&' || typeChar == '!' || 
-            typeChar == '~' || typeChar == 'z' || typeChar == '?') {
-            dataType = parseTypeChar(typeChar);
-            offset++;
-        }
-    }
-    
-    instr.addOperand(PCodeOperand(
-        PCodeOperandType::LOCAL_VAR,
-        index,
-        dataType
-    ));
-    
+    PCodeType dataType = tryParseTypeChar(data, offset, PCodeType::VARIANT);
+    instr.addOperand(PCodeOperand(PCodeOperandType::LOCAL_VAR, index, dataType));
     return true;
 }
 
 bool PCodeDisassembler::decodeOperandVTable(
     std::span<const uint8_t> data, size_t& offset, PCodeInstruction& instr) {
     
-    // VTable reference is complex - for now just read as int16
     int16_t index;
     if (!readInt16(data, offset, index)) {
         setError("Failed to read vtable reference");
         return false;
     }
-    
-    instr.addOperand(PCodeOperand(
-        PCodeOperandType::VTABLE,
-        index,
-        PCodeType::OBJECT
-    ));
-    
+    instr.addOperand(PCodeOperand(PCodeOperandType::VTABLE, index, PCodeType::OBJECT));
     return true;
 }
 
