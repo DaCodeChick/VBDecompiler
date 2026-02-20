@@ -34,6 +34,10 @@ set(CORE_SOURCES
     src/core/disasm/pcode/PCodeInstruction.cpp
     src/core/disasm/pcode/PCodeOpcode.cpp
     src/core/disasm/pcode/PCodeDisassembler.cpp
+    src/core/ir/IRType.cpp
+    src/core/ir/IRExpression.cpp
+    src/core/ir/IRStatement.cpp
+    src/core/ir/IRFunction.cpp
 )
 
 set(UI_SOURCES
@@ -134,6 +138,19 @@ target_link_libraries(test_pcode PRIVATE
 )
 
 target_include_directories(test_pcode PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# IR test
+add_executable(test_ir
+    tests/test_ir.cpp
+    src/core/ir/IRType.cpp
+    src/core/ir/IRExpression.cpp
+    src/core/ir/IRStatement.cpp
+    src/core/ir/IRFunction.cpp
+)
+
+target_include_directories(test_ir PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
