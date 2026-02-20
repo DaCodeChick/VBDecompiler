@@ -8,7 +8,6 @@
 namespace VBDecompiler {
 
 // Decode TEST instruction (Logical compare)
-// RDSS Refactored: 97 lines -> 28 lines (71% reduction)
 bool X86Disassembler::decodeTest(std::span<const uint8_t> data, size_t& offset,
                                   X86Instruction& instr, uint8_t opcode) {
     instr.setOpcode(X86Opcode::TEST);

@@ -8,7 +8,6 @@
 namespace VBDecompiler {
 
 // Decode MOV instruction (Data Transfer)
-// RDSS Refactored: 171 lines -> 79 lines (54% reduction)
 bool X86Disassembler::decodeMov(std::span<const uint8_t> data, size_t& offset,
                                  X86Instruction& instr, uint8_t opcode) {
     instr.setOpcode(X86Opcode::MOV);

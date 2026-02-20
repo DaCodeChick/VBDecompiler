@@ -1,5 +1,4 @@
 // X86DecoderHelpers.cpp - Helper functions for x86 instruction decoding
-// Part of X86Disassembler RDSS refactoring
 
 #include "X86Disassembler.h"
 
@@ -123,7 +122,7 @@ bool X86Disassembler::decodeSIB(std::span<const uint8_t> data, size_t& offset,
 // Memory Operand Decoding
 // ============================================================================
 
-// Helper: Apply SIB byte to operand (RDSS: eliminate duplication)
+// Helper: Apply SIB byte to operand
 void X86Disassembler::applySIBToOperand(uint8_t scale, uint8_t index, uint8_t base, X86Operand& operand) {
     operand.base = getReg32(base);
     if (index != 4) {  // ESP can't be index

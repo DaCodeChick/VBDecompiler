@@ -68,15 +68,15 @@ private:
                             uint8_t mod, uint8_t rm, uint8_t operandSize,
                             X86Operand& operand);
     
-    // Helper to apply SIB byte to operand (RDSS: eliminate duplication)
+    // Helper to apply SIB byte to operand
     void applySIBToOperand(uint8_t scale, uint8_t index, uint8_t base, X86Operand& operand);
     
-    // Operand creation helpers (RDSS: eliminate duplication)
+    // Operand creation helpers
     static X86Operand makeRegisterOperand(X86Register reg, uint8_t size);
     static X86Operand makeImmediateOperand(uint32_t value, uint8_t size);
     static X86Operand makeOffsetOperand(int32_t offset, uint8_t size);
     
-    // High-level ModR/M decoding helpers (RDSS: simplify common patterns)
+    // High-level ModR/M decoding helpers
     bool decodeModRMtoRegOperands(std::span<const uint8_t> data, size_t& offset,
                                    uint8_t size, X86Operand& dst, X86Operand& src);
     bool decodeRegtoModRMOperands(std::span<const uint8_t> data, size_t& offset,

@@ -1,15 +1,13 @@
 // VBDecompiler - Visual Basic Decompiler
 // Copyright (c) 2024 VBDecompiler Project
 // SPDX-License-Identifier: MIT
-//
-// RDSS Refactoring: Extract common operand creation and ModR/M decoding patterns
 
 #include "X86Disassembler.h"
 
 namespace VBDecompiler {
 
 // ============================================================================
-// Operand Creation Helpers (RDSS: Eliminate 4-line pattern duplication)
+// Operand Creation Helpers
 // ============================================================================
 
 X86Operand X86Disassembler::makeRegisterOperand(X86Register reg, uint8_t size) {
@@ -37,7 +35,7 @@ X86Operand X86Disassembler::makeOffsetOperand(int32_t offset, uint8_t size) {
 }
 
 // ============================================================================
-// ModR/M Operand Decoding Helpers (RDSS: Simplify 15-20 line pattern)
+// ModR/M Operand Decoding Helpers
 // ============================================================================
 
 /**
