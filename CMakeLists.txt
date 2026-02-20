@@ -89,5 +89,21 @@ target_include_directories(test_vb PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+add_executable(test_x86
+    src/test_x86.cpp
+    src/core/pe/PEFile.cpp
+    src/core/vb/VBFile.cpp
+    src/core/disasm/x86/X86Instruction.cpp
+    src/core/disasm/x86/X86Disassembler.cpp
+)
+
+target_link_libraries(test_x86 PRIVATE
+    Qt6::Core
+)
+
+target_include_directories(test_x86 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 # Installation
 install(TARGETS vbdecompiler DESTINATION bin)
