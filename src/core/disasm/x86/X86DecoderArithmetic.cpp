@@ -14,7 +14,7 @@ bool X86Disassembler::decodeArithmetic(std::span<const uint8_t> data, size_t& of
     (void)offset;  // Unused - simplified implementation
     
     // Simplified - map opcode ranges to operation
-    if (opcode >= 0x00 && opcode <= 0x05) {
+    if (opcode <= 0x05) {
         instr.setOpcode(X86Opcode::ADD);
     }
     else if (opcode >= 0x28 && opcode <= 0x2D) {
@@ -35,22 +35,12 @@ bool X86Disassembler::decodeIncDec(std::span<const uint8_t> data, size_t& offset
     if (opcode >= 0x40 && opcode <= 0x47) {
         // INC r32 (0x40-0x47)
         instr.setOpcode(X86Opcode::INC);
-        
-        X86Operand operand;
-        operand.type = X86OperandType::REGISTER;
-        operand.reg = getReg32(opcode - 0x40);
-        operand.size = 4;
-        instr.addOperand(operand);
+        instr.addOperand(makeRegisterOperand(getReg32(opcode - 0x40), 4));
     }
     else if (opcode >= 0x48 && opcode <= 0x4F) {
         // DEC r32 (0x48-0x4F)
         instr.setOpcode(X86Opcode::DEC);
-        
-        X86Operand operand;
-        operand.type = X86OperandType::REGISTER;
-        operand.reg = getReg32(opcode - 0x48);
-        operand.size = 4;
-        instr.addOperand(operand);
+        instr.addOperand(makeRegisterOperand(getReg32(opcode - 0x48), 4));
     }
     else if (opcode == 0xFE) {
         // INC/DEC r/m8
@@ -68,9 +58,7 @@ bool X86Disassembler::decodeIncDec(std::span<const uint8_t> data, size_t& offset
         
         X86Operand operand;
         if (mod == 3) {
-            operand.type = X86OperandType::REGISTER;
-            operand.reg = getReg8(rm);
-            operand.size = 1;
+            operand = makeRegisterOperand(getReg8(rm), 1);
         } else {
             if (!decodeMemoryOperand(data, offset, mod, rm, 1, operand)) return false;
         }
@@ -92,9 +80,7 @@ bool X86Disassembler::decodeIncDec(std::span<const uint8_t> data, size_t& offset
         
         X86Operand operand;
         if (mod == 3) {
-            operand.type = X86OperandType::REGISTER;
-            operand.reg = getReg32(rm);
-            operand.size = 4;
+            operand = makeRegisterOperand(getReg32(rm), 4);
         } else {
             if (!decodeMemoryOperand(data, offset, mod, rm, 4, operand)) return false;
         }
