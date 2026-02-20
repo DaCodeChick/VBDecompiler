@@ -16,12 +16,7 @@ bool X86Disassembler::decodeCall(std::span<const uint8_t> data, size_t& offset,
         // CALL rel32 - near relative call
         int32_t relOffset;
         if (!readSDword(data, offset, relOffset)) return false;
-        
-        X86Operand operand;
-        operand.type = X86OperandType::OFFSET;
-        operand.offset = relOffset;
-        operand.size = 4;
-        instr.addOperand(operand);
+        instr.addOperand(makeOffsetOperand(relOffset, 4));
     }
     
     return true;
@@ -36,23 +31,13 @@ bool X86Disassembler::decodeJmp(std::span<const uint8_t> data, size_t& offset,
         // JMP rel32 - near jump
         int32_t relOffset;
         if (!readSDword(data, offset, relOffset)) return false;
-        
-        X86Operand operand;
-        operand.type = X86OperandType::OFFSET;
-        operand.offset = relOffset;
-        operand.size = 4;
-        instr.addOperand(operand);
+        instr.addOperand(makeOffsetOperand(relOffset, 4));
     }
     else if (opcode == 0xEB) {
         // JMP rel8 - short jump
         int8_t relOffset;
         if (!readSByte(data, offset, relOffset)) return false;
-        
-        X86Operand operand;
-        operand.type = X86OperandType::OFFSET;
-        operand.offset = relOffset;
-        operand.size = 1;
-        instr.addOperand(operand);
+        instr.addOperand(makeOffsetOperand(relOffset, 1));
     }
     
     return true;
@@ -76,12 +61,7 @@ bool X86Disassembler::decodeJcc(std::span<const uint8_t> data, size_t& offset,
         
         int8_t relOffset;
         if (!readSByte(data, offset, relOffset)) return false;
-        
-        X86Operand operand;
-        operand.type = X86OperandType::OFFSET;
-        operand.offset = relOffset;
-        operand.size = 1;
-        instr.addOperand(operand);
+        instr.addOperand(makeOffsetOperand(relOffset, 1));
         
         return true;
     }
@@ -106,12 +86,7 @@ bool X86Disassembler::decodeRet(std::span<const uint8_t> data, size_t& offset,
         
         uint16_t popBytes;
         if (!readWord(data, offset, popBytes)) return false;
-        
-        X86Operand operand;
-        operand.type = X86OperandType::IMMEDIATE;
-        operand.immediate = popBytes;
-        operand.size = 2;
-        instr.addOperand(operand);
+        instr.addOperand(makeImmediateOperand(popBytes, 2));
     }
     else if (opcode == 0xCB || opcode == 0xCA) {
         // RETF - far return

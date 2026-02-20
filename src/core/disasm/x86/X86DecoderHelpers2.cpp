@@ -28,6 +28,14 @@ X86Operand X86Disassembler::makeImmediateOperand(uint32_t value, uint8_t size) {
     return op;
 }
 
+X86Operand X86Disassembler::makeOffsetOperand(int32_t offset, uint8_t size) {
+    X86Operand op;
+    op.type = X86OperandType::OFFSET;
+    op.offset = offset;
+    op.size = size;
+    return op;
+}
+
 // ============================================================================
 // ModR/M Operand Decoding Helpers (RDSS: Simplify 15-20 line pattern)
 // ============================================================================
