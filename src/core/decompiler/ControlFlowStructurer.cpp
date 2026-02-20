@@ -19,13 +19,13 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::structureFunction(const I
     // Create root sequence node
     auto root = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
     
-    // Get all blocks in execution order
+    // Get all blocks in execution order using BFS
     std::vector<const IRBasicBlock*> blocks;
-    std::unordered_set<const IRBasicBlock*> visited;
+    std::unordered_set<uint32_t> visitedIds;  // Use IDs instead of pointers
     std::queue<const IRBasicBlock*> queue;
     
     queue.push(entryBlock);
-    visited.insert(entryBlock);
+    visitedIds.insert(entryBlock->getId());
     
     while (!queue.empty()) {
         const auto* block = queue.front();
@@ -34,10 +34,12 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::structureFunction(const I
         
         // Add successors
         for (uint32_t succId : block->getSuccessors()) {
-            const auto* succBlock = getBlockById(succId, function);
-            if (succBlock && visited.find(succBlock) == visited.end()) {
-                visited.insert(succBlock);
-                queue.push(succBlock);
+            if (visitedIds.find(succId) == visitedIds.end()) {
+                visitedIds.insert(succId);
+                const auto* succBlock = getBlockById(succId, function);
+                if (succBlock) {
+                    queue.push(succBlock);
+                }
             }
         }
     }
@@ -64,11 +66,11 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
     
     auto root = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
     
-    // Process blocks in order
-    std::unordered_set<const IRBasicBlock*> processed;
+    // Process blocks in order - use IDs instead of pointers for tracking
+    std::unordered_set<uint32_t> processedIds;
     
     for (const auto* block : blocks) {
-        if (processed.find(block) != processed.end()) {
+        if (processedIds.find(block->getId()) != processedIds.end()) {
             continue;
         }
         
@@ -104,7 +106,7 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
             doWhileNode->addChild(std::move(bodyNode));
             
             root->addChild(std::move(doWhileNode));
-            processed.insert(block);
+            processedIds.insert(block->getId());
             continue;
         }
         
@@ -142,12 +144,12 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
                 
                 // Mark all blocks in the loop body as processed
                 for (const auto* b : bodyRegionBlocks) {
-                    processed.insert(b);
+                    processedIds.insert(b->getId());
                 }
             }
             
             root->addChild(std::move(whileNode));
-            processed.insert(block);
+            processedIds.insert(block->getId());
             continue;
         }
         
@@ -185,7 +187,7 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
                 
                 // Mark all blocks in the then region as processed
                 for (const auto* b : thenRegionBlocks) {
-                    processed.insert(b);
+                    processedIds.insert(b->getId());
                 }
             }
             
@@ -202,12 +204,12 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
                 
                 // Mark all blocks in the else region as processed
                 for (const auto* b : elseRegionBlocks) {
-                    processed.insert(b);
+                    processedIds.insert(b->getId());
                 }
             }
             
             root->addChild(std::move(ifNode));
-            processed.insert(block);
+            processedIds.insert(block->getId());
             continue;
         }
         
@@ -240,12 +242,12 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
                 
                 // Mark all blocks in the then region as processed
                 for (const auto* b : thenRegionBlocks) {
-                    processed.insert(b);
+                    processedIds.insert(b->getId());
                 }
             }
             
             root->addChild(std::move(ifNode));
-            processed.insert(block);
+            processedIds.insert(block->getId());
             continue;
         }
         
@@ -253,7 +255,7 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
         auto seqNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
         seqNode->addBlock(block);
         root->addChild(std::move(seqNode));
-        processed.insert(block);
+        processedIds.insert(block->getId());
     }
     
     return root;
@@ -642,18 +644,23 @@ std::vector<const IRBasicBlock*> ControlFlowStructurer::collectRegionBlocks(
     }
     
     std::vector<const IRBasicBlock*> regionBlocks;
-    std::unordered_set<const IRBasicBlock*> visited;
+    std::unordered_set<uint32_t> visitedIds;  // Use IDs instead of pointers
     std::queue<const IRBasicBlock*> queue;
     
+    uint32_t exitId = exitBlock ? exitBlock->getId() : UINT32_MAX;
+    uint32_t excludeId = excludeBlock ? excludeBlock->getId() : UINT32_MAX;
+    
     queue.push(startBlock);
-    visited.insert(startBlock);
+    visitedIds.insert(startBlock->getId());
     
     while (!queue.empty()) {
         const auto* block = queue.front();
         queue.pop();
         
+        uint32_t blockId = block->getId();
+        
         // Don't include the exit block or exclude block
-        if (block == exitBlock || block == excludeBlock) {
+        if (blockId == exitId || blockId == excludeId) {
             continue;
         }
         
@@ -661,11 +668,17 @@ std::vector<const IRBasicBlock*> ControlFlowStructurer::collectRegionBlocks(
         
         // Add successors to queue (but only if they're not the exit or exclude block)
         for (uint32_t succId : block->getSuccessors()) {
-            const auto* succBlock = getBlockById(succId, function);
-            if (succBlock && visited.find(succBlock) == visited.end()) {
-                visited.insert(succBlock);
-                // Don't traverse past the exit block or exclude block
-                if (succBlock != exitBlock && succBlock != excludeBlock) {
+            // Skip if already visited
+            if (visitedIds.find(succId) != visitedIds.end()) {
+                continue;
+            }
+            
+            visitedIds.insert(succId);
+            
+            // Don't traverse past the exit block or exclude block
+            if (succId != exitId && succId != excludeId) {
+                const auto* succBlock = getBlockById(succId, function);
+                if (succBlock) {
                     queue.push(succBlock);
                 }
             }
