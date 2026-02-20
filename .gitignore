@@ -1,54 +1,60 @@
-# C++ objects and libs
-*.slo
-*.lo
+# C++ build artifacts
 *.o
+*.obj
 *.a
-*.la
-*.lai
+*.lib
 *.so
 *.so.*
-*.dll
 *.dylib
+*.dll
+*.exe
 
-# Qt-es
-object_script.*.Release
-object_script.*.Debug
-*_plugin_import.cpp
-/.qmake.cache
-/.qmake.stash
-*.pro.user
-*.pro.user.*
-*.qbs.user
-*.qbs.user.*
-*.moc
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+build/
+out/
+
+# Qt generated files
 moc_*.cpp
 moc_*.h
 qrc_*.cpp
 ui_*.h
-*.qmlc
-*.jsc
-Makefile*
-*build-*
 *.qm
-*.prl
-
-# Qt unit tests
-target_wrapper.*
-
-# QtCreator
 *.autosave
+*.pro.user
+*.pro.user.*
+.qmake.cache
+.qmake.stash
 
-# QtCreator Qml
-*.qmlproject.user
-*.qmlproject.user.*
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vs/
+*.vcxproj.user
 
-# QtCreator CMake
-CMakeLists.txt.user*
+# OS
+.DS_Store
+Thumbs.db
 
-# QtCreator 4.8< compilation database
-compile_commands.json
+# Test executables and artifacts
+tests/fixtures/*.exe
+tests/output/
+*.pdb
 
-# QtCreator local machine specific files for imported projects
-*creator.user*
+# Build artifacts
+*.bak
+*.tmp
 
-*_qmlcache.qrc
+# Debug/Release directories
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
