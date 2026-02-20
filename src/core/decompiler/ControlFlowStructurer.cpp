@@ -128,12 +128,22 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
             // Note: Don't add the condition block itself, as it contains BRANCH/GOTO
             // statements that should not be generated. The condition is already extracted.
             
-            // Create child node for loop body
+            // Recursively structure loop body
             if (bodyBlock) {
-                auto bodyNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
-                bodyNode->addBlock(bodyBlock);
-                whileNode->addChild(std::move(bodyNode));
-                processed.insert(bodyBlock);
+                // Collect all blocks in the loop body (from bodyBlock until exitBlock)
+                // Exclude the condition block (current block) to prevent infinite recursion
+                auto bodyRegionBlocks = collectRegionBlocks(bodyBlock, exitBlock, block, function);
+                
+                // Recursively structure the loop body
+                auto bodyNode = analyzeRegion(bodyRegionBlocks, function);
+                if (bodyNode) {
+                    whileNode->addChild(std::move(bodyNode));
+                }
+                
+                // Mark all blocks in the loop body as processed
+                for (const auto* b : bodyRegionBlocks) {
+                    processed.insert(b);
+                }
             }
             
             root->addChild(std::move(whileNode));
@@ -161,18 +171,39 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
             // Note: Don't add the condition block itself, as it contains BRANCH/GOTO
             // statements that should not be generated. The condition is already extracted.
             
-            // Create child nodes for then and else branches
+            // Recursively structure then and else branches
             if (thenBlock) {
-                auto thenNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
-                thenNode->addBlock(thenBlock);
-                ifNode->addChild(std::move(thenNode));
-                processed.insert(thenBlock);
+                // Collect all blocks in the then region (from thenBlock until mergeBlock)
+                // Exclude the condition block to avoid including it in the branch
+                auto thenRegionBlocks = collectRegionBlocks(thenBlock, mergeBlock, block, function);
+                
+                // Recursively structure the then region
+                auto thenNode = analyzeRegion(thenRegionBlocks, function);
+                if (thenNode) {
+                    ifNode->addChild(std::move(thenNode));
+                }
+                
+                // Mark all blocks in the then region as processed
+                for (const auto* b : thenRegionBlocks) {
+                    processed.insert(b);
+                }
             }
+            
             if (elseBlock) {
-                auto elseNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
-                elseNode->addBlock(elseBlock);
-                ifNode->addChild(std::move(elseNode));
-                processed.insert(elseBlock);
+                // Collect all blocks in the else region (from elseBlock until mergeBlock)
+                // Exclude the condition block to avoid including it in the branch
+                auto elseRegionBlocks = collectRegionBlocks(elseBlock, mergeBlock, block, function);
+                
+                // Recursively structure the else region
+                auto elseNode = analyzeRegion(elseRegionBlocks, function);
+                if (elseNode) {
+                    ifNode->addChild(std::move(elseNode));
+                }
+                
+                // Mark all blocks in the else region as processed
+                for (const auto* b : elseRegionBlocks) {
+                    processed.insert(b);
+                }
             }
             
             root->addChild(std::move(ifNode));
@@ -195,12 +226,22 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
             // Note: Don't add the condition block itself, as it contains BRANCH/GOTO
             // statements that should not be generated. The condition is already extracted.
             
-            // Create child node for then branch
+            // Recursively structure then branch
             if (thenBlock) {
-                auto thenNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
-                thenNode->addBlock(thenBlock);
-                ifNode->addChild(std::move(thenNode));
-                processed.insert(thenBlock);
+                // Collect all blocks in the then region (from thenBlock until mergeBlock)
+                // Exclude the condition block to avoid including it in the branch
+                auto thenRegionBlocks = collectRegionBlocks(thenBlock, mergeBlock, block, function);
+                
+                // Recursively structure the then region
+                auto thenNode = analyzeRegion(thenRegionBlocks, function);
+                if (thenNode) {
+                    ifNode->addChild(std::move(thenNode));
+                }
+                
+                // Mark all blocks in the then region as processed
+                for (const auto* b : thenRegionBlocks) {
+                    processed.insert(b);
+                }
             }
             
             root->addChild(std::move(ifNode));
@@ -550,6 +591,50 @@ bool ControlFlowStructurer::isBackEdge(
 
 const IRBasicBlock* ControlFlowStructurer::getBlockById(uint32_t id, const IRFunction& function) const {
     return function.getBasicBlock(id);
+}
+
+std::vector<const IRBasicBlock*> ControlFlowStructurer::collectRegionBlocks(
+    const IRBasicBlock* startBlock,
+    const IRBasicBlock* exitBlock,
+    const IRBasicBlock* excludeBlock,
+    const IRFunction& function
+) const {
+    if (!startBlock) {
+        return {};
+    }
+    
+    std::vector<const IRBasicBlock*> regionBlocks;
+    std::unordered_set<const IRBasicBlock*> visited;
+    std::queue<const IRBasicBlock*> queue;
+    
+    queue.push(startBlock);
+    visited.insert(startBlock);
+    
+    while (!queue.empty()) {
+        const auto* block = queue.front();
+        queue.pop();
+        
+        // Don't include the exit block or exclude block
+        if (block == exitBlock || block == excludeBlock) {
+            continue;
+        }
+        
+        regionBlocks.push_back(block);
+        
+        // Add successors to queue (but only if they're not the exit or exclude block)
+        for (uint32_t succId : block->getSuccessors()) {
+            const auto* succBlock = getBlockById(succId, function);
+            if (succBlock && visited.find(succBlock) == visited.end()) {
+                visited.insert(succBlock);
+                // Don't traverse past the exit block or exclude block
+                if (succBlock != exitBlock && succBlock != excludeBlock) {
+                    queue.push(succBlock);
+                }
+            }
+        }
+    }
+    
+    return regionBlocks;
 }
 
 } // namespace VBDecompiler

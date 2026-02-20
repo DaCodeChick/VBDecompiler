@@ -488,6 +488,102 @@ void testDoWhileLoop() {
     std::cout << "✓ Test 7 passed!\n\n";
 }
 
+/**
+ * @brief Test 8: Nested If statements
+ * 
+ * Function CheckValue(x As Integer) As String
+ *     If x > 0 Then
+ *         If x > 10 Then
+ *             Return "Large"
+ *         Else
+ *             Return "Small"
+ *         End If
+ *     Else
+ *         Return "Negative"
+ *     End If
+ * End Function
+ */
+void testNestedStructures() {
+    std::cout << "Test 8: Nested If Statements\n";
+    std::cout << "============================\n\n";
+    
+    IRFunction checkFunc("CheckValue", IRTypes::String);
+    checkFunc.setAddress(0x00408000);
+    
+    // Parameter
+    IRVariable paramX(0, "x", IRTypes::Integer);
+    checkFunc.addParameter(std::move(paramX));
+    
+    // Create basic blocks
+    IRBasicBlock& entryBB = checkFunc.createBasicBlock();
+    checkFunc.setEntryBlock(entryBB.getId());
+    
+    IRBasicBlock& outerThenBB = checkFunc.createBasicBlock();
+    IRBasicBlock& outerElseBB = checkFunc.createBasicBlock();
+    IRBasicBlock& innerThenBB = checkFunc.createBasicBlock();
+    IRBasicBlock& innerElseBB = checkFunc.createBasicBlock();
+    
+    // Entry: If x > 0
+    auto outerCondX = IRExpression::makeVariable(checkFunc.getParameters()[0]);
+    auto outerZero = IRExpression::makeConstant(IRConstant(static_cast<int64_t>(0)));
+    auto outerCond = IRExpression::makeBinary(
+        IRExpressionKind::GREATER_THAN,
+        std::move(outerCondX),
+        std::move(outerZero),
+        IRTypes::Boolean
+    );
+    auto outerBranch = IRStatement::makeBranch(std::move(outerCond), outerThenBB.getId());
+    entryBB.addStatement(std::move(outerBranch));
+    
+    auto gotoOuterElse = IRStatement::makeGoto(outerElseBB.getId());
+    entryBB.addStatement(std::move(gotoOuterElse));
+    
+    // Outer Then: If x > 10
+    auto innerCondX = IRExpression::makeVariable(checkFunc.getParameters()[0]);
+    auto ten = IRExpression::makeConstant(IRConstant(static_cast<int64_t>(10)));
+    auto innerCond = IRExpression::makeBinary(
+        IRExpressionKind::GREATER_THAN,
+        std::move(innerCondX),
+        std::move(ten),
+        IRTypes::Boolean
+    );
+    auto innerBranch = IRStatement::makeBranch(std::move(innerCond), innerThenBB.getId());
+    outerThenBB.addStatement(std::move(innerBranch));
+    
+    auto gotoInnerElse = IRStatement::makeGoto(innerElseBB.getId());
+    outerThenBB.addStatement(std::move(gotoInnerElse));
+    
+    // Inner Then: Return "Large"
+    auto largeLit = IRExpression::makeConstant(IRConstant("Large"));
+    auto returnLarge = IRStatement::makeReturn(std::move(largeLit));
+    innerThenBB.addStatement(std::move(returnLarge));
+    
+    // Inner Else: Return "Small"
+    auto smallLit = IRExpression::makeConstant(IRConstant("Small"));
+    auto returnSmall = IRStatement::makeReturn(std::move(smallLit));
+    innerElseBB.addStatement(std::move(returnSmall));
+    
+    // Outer Else: Return "Negative"
+    auto negLit = IRExpression::makeConstant(IRConstant("Negative"));
+    auto returnNeg = IRStatement::makeReturn(std::move(negLit));
+    outerElseBB.addStatement(std::move(returnNeg));
+    
+    // Setup CFG edges
+    checkFunc.connectBlocks(entryBB.getId(), outerThenBB.getId());
+    checkFunc.connectBlocks(entryBB.getId(), outerElseBB.getId());
+    checkFunc.connectBlocks(outerThenBB.getId(), innerThenBB.getId());
+    checkFunc.connectBlocks(outerThenBB.getId(), innerElseBB.getId());
+    
+    // Decompile (with structuring)
+    Decompiler decompiler;
+    std::string vbCode = decompiler.decompile(checkFunc, true);
+    
+    std::cout << "Generated VB6 Code:\n";
+    std::cout << "-------------------\n";
+    std::cout << vbCode << "\n";
+    std::cout << "✓ Test 8 passed!\n\n";
+}
+
 int main() {
     std::cout << "VBDecompiler - Decompiler Test Suite\n";
     std::cout << "=====================================\n\n";
@@ -500,6 +596,7 @@ int main() {
         testTypeCasting();
         testWhileLoop();
         testDoWhileLoop();
+        testNestedStructures();
         
         std::cout << "\n";
         std::cout << "====================================\n";

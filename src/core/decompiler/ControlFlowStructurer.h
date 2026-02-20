@@ -141,6 +141,25 @@ private:
         const IRBasicBlock*& exitBlock
     );
     
+    bool matchForLoop(
+        const IRBasicBlock* block,
+        const IRFunction& function,
+        const IRBasicBlock*& bodyBlock,
+        const IRBasicBlock*& exitBlock,
+        IRVariable*& loopVar,
+        const IRExpression*& startExpr,
+        const IRExpression*& endExpr,
+        const IRExpression*& stepExpr
+    );
+    
+    bool matchSelectCase(
+        const IRBasicBlock* block,
+        const IRFunction& function,
+        std::vector<const IRBasicBlock*>& caseBlocks,
+        const IRBasicBlock*& defaultBlock,
+        const IRBasicBlock*& exitBlock
+    );
+    
     // CFG analysis helpers
     std::vector<const IRBasicBlock*> getBlocksInPostOrder(const IRFunction& function) const;
     std::unordered_set<const IRBasicBlock*> getDominators(
@@ -156,6 +175,25 @@ private:
     
     // Utility
     const IRBasicBlock* getBlockById(uint32_t id, const IRFunction& function) const;
+    
+    /**
+     * @brief Collect all blocks in a region starting from a given block
+     * 
+     * Collects blocks reachable from startBlock until reaching exitBlock.
+     * Uses BFS traversal, excluding blocks that are outside the region.
+     * 
+     * @param startBlock Starting block of the region
+     * @param exitBlock Exit block (not included in result)
+     * @param excludeBlock Additional block to exclude from traversal (e.g., loop header)
+     * @param function IR function containing the blocks
+     * @return Vector of blocks in the region
+     */
+    std::vector<const IRBasicBlock*> collectRegionBlocks(
+        const IRBasicBlock* startBlock,
+        const IRBasicBlock* exitBlock,
+        const IRBasicBlock* excludeBlock,
+        const IRFunction& function
+    ) const;
 };
 
 } // namespace VBDecompiler
