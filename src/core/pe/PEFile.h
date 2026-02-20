@@ -144,6 +144,15 @@ private:
     bool parseImports();
 
     void setError(const std::string& error);
+    
+    /**
+     * @brief Helper to get section and offset for an RVA
+     * @param rva Relative Virtual Address
+     * @param outSection Output pointer to section (set if found)
+     * @param outOffset Output offset within section (set if found)
+     * @return true if RVA is valid and section found, false otherwise
+     */
+    [[nodiscard]] bool getRVAData(uint32_t rva, const PESection** outSection, size_t* outOffset) const;
 
     std::filesystem::path path_;
     std::vector<std::byte> fileData_;

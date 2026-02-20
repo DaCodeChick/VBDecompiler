@@ -132,20 +132,15 @@ bool PEFile::parseImports() {
         return true;
     }
 
-    // Find section containing import directory
-    const PESection* importSection = getSectionByRVA(importDir.VirtualAddress);
-    if (!importSection) {
+    const PESection* importSection = nullptr;
+    size_t offset = 0;
+    
+    if (!getRVAData(importDir.VirtualAddress, &importSection, &offset)) {
         // Imports not found, but continue anyway
         return true;
     }
 
-    int64_t sectionOffset = importSection->rvaToOffset(importDir.VirtualAddress);
-    if (sectionOffset < 0) {
-        return true;
-    }
-
     const auto& sectionData = importSection->getData();
-    size_t offset = static_cast<size_t>(sectionOffset);
 
     // Parse import directory table
     while (offset + sizeof(ImportDirectoryEntry) <= sectionData.size()) {
@@ -195,40 +190,32 @@ const PESection* PEFile::getSectionByRVA(uint32_t rva) const {
 }
 
 std::optional<uint32_t> PEFile::rvaToFileOffset(uint32_t rva) const {
-    const PESection* section = getSectionByRVA(rva);
-    if (!section) {
+    const PESection* section = nullptr;
+    size_t offset = 0;
+    
+    if (!getRVAData(rva, &section, &offset)) {
         return std::nullopt;
     }
 
-    int64_t sectionOffset = section->rvaToOffset(rva);
-    if (sectionOffset < 0) {
-        return std::nullopt;
-    }
-
-    return section->getRawDataPointer() + static_cast<uint32_t>(sectionOffset);
+    return section->getRawDataPointer() + static_cast<uint32_t>(offset);
 }
 
 std::vector<std::byte> PEFile::readAtRVA(uint32_t rva, size_t size) const {
-    const PESection* section = getSectionByRVA(rva);
-    if (!section) {
-        return {};
-    }
-
-    int64_t sectionOffset = section->rvaToOffset(rva);
-    if (sectionOffset < 0) {
+    const PESection* section = nullptr;
+    size_t offset = 0;
+    
+    if (!getRVAData(rva, &section, &offset)) {
         return {};
     }
 
     const auto& sectionData = section->getData();
-    size_t offset = static_cast<size_t>(sectionOffset);
     
     if (offset + size > sectionData.size()) {
         size = sectionData.size() - offset;
     }
 
-    std::vector<std::byte> result(sectionData.begin() + offset,
+    return std::vector<std::byte>(sectionData.begin() + offset,
                                    sectionData.begin() + offset + size);
-    return result;
 }
 
 std::vector<std::string> PEFile::getImportedDLLs() const {
@@ -253,6 +240,22 @@ std::vector<std::string> PEFile::getImportsFromDLL(const std::string& dllName) c
 void PEFile::setError(const std::string& error) {
     lastError_ = error;
     valid_ = false;
+}
+
+bool PEFile::getRVAData(uint32_t rva, const PESection** outSection, size_t* outOffset) const {
+    const PESection* section = getSectionByRVA(rva);
+    if (!section) {
+        return false;
+    }
+    
+    int64_t sectionOffset = section->rvaToOffset(rva);
+    if (sectionOffset < 0) {
+        return false;
+    }
+    
+    if (outSection) *outSection = section;
+    if (outOffset) *outOffset = static_cast<size_t>(sectionOffset);
+    return true;
 }
 
 } // namespace VBDecompiler
