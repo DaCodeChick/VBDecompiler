@@ -138,7 +138,7 @@ bool PEFile::parseImports() {
         return true;
     }
 
-    const auto& sectionData = rvaData->section->getData();
+    const auto& sectionData = rvaData->section.get().getData();
     size_t offset = rvaData->offset;
 
     // Parse import directory table
@@ -194,7 +194,7 @@ std::optional<uint32_t> PEFile::rvaToFileOffset(uint32_t rva) const {
         return std::nullopt;
     }
 
-    return rvaData->section->getRawDataPointer() + static_cast<uint32_t>(rvaData->offset);
+    return rvaData->section.get().getRawDataPointer() + static_cast<uint32_t>(rvaData->offset);
 }
 
 std::vector<std::byte> PEFile::readAtRVA(uint32_t rva, size_t size) const {
@@ -203,7 +203,7 @@ std::vector<std::byte> PEFile::readAtRVA(uint32_t rva, size_t size) const {
         return {};
     }
 
-    const auto& sectionData = rvaData->section->getData();
+    const auto& sectionData = rvaData->section.get().getData();
     size_t offset = rvaData->offset;
     
     if (offset + size > sectionData.size()) {
@@ -249,7 +249,7 @@ std::optional<PEFile::RVAData> PEFile::getRVAData(uint32_t rva) const {
         return std::nullopt;
     }
     
-    return RVAData{section, static_cast<size_t>(sectionOffset)};
+    return RVAData{std::cref(*section), static_cast<size_t>(sectionOffset)};
 }
 
 } // namespace VBDecompiler

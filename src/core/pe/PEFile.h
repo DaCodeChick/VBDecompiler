@@ -4,11 +4,12 @@
 #include "PEHeader.h"
 #include "PESection.h"
 #include <filesystem>
-#include <vector>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace VBDecompiler {
 
@@ -140,7 +141,7 @@ public:
 private:
     /// Result type for RVA lookup operations
     struct RVAData {
-        const PESection* section;
+        std::reference_wrapper<const PESection> section;
         size_t offset;
     };
 
