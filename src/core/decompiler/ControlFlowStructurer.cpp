@@ -1,5 +1,5 @@
 // VBDecompiler - Visual Basic Decompiler
-// Copyright (c) 2024 VBDecompiler Project
+// Copyright (c) 2026 VBDecompiler Project
 // SPDX-License-Identifier: MIT
 
 #include "ControlFlowStructurer.h"
@@ -34,7 +34,7 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::structureFunction(const I
         
         // Add successors
         for (uint32_t succId : block->getSuccessors()) {
-            if (visitedIds.find(succId) == visitedIds.end()) {
+            if (!visitedIds.contains(succId)) {
                 visitedIds.insert(succId);
                 const auto* succBlock = getBlockById(succId, function);
                 if (succBlock) {
@@ -552,7 +552,7 @@ bool ControlFlowStructurer::matchDoWhileLoop(
 
 std::vector<const IRBasicBlock*> ControlFlowStructurer::getBlocksInPostOrder(const IRFunction& function) const {
     std::vector<const IRBasicBlock*> result;
-    std::unordered_set<const IRBasicBlock*> visited;
+    std::unordered_set<uint32_t> visitedIds;
     std::stack<const IRBasicBlock*> stack;
     
     const auto* entryBlock = function.getEntryBlock();
@@ -565,19 +565,21 @@ std::vector<const IRBasicBlock*> ControlFlowStructurer::getBlocksInPostOrder(con
     while (!stack.empty()) {
         const auto* block = stack.top();
         
-        if (visited.find(block) != visited.end()) {
+        if (visitedIds.contains(block->getId())) {
             stack.pop();
             result.push_back(block);
             continue;
         }
         
-        visited.insert(block);
+        visitedIds.insert(block->getId());
         
         // Push successors
         for (uint32_t succId : block->getSuccessors()) {
-            const auto* succBlock = getBlockById(succId, function);
-            if (succBlock && visited.find(succBlock) == visited.end()) {
-                stack.push(succBlock);
+            if (!visitedIds.contains(succId)) {
+                const auto* succBlock = getBlockById(succId, function);
+                if (succBlock) {
+                    stack.push(succBlock);
+                }
             }
         }
     }
@@ -669,7 +671,7 @@ std::vector<const IRBasicBlock*> ControlFlowStructurer::collectRegionBlocks(
         // Add successors to queue (but only if they're not the exit or exclude block)
         for (uint32_t succId : block->getSuccessors()) {
             // Skip if already visited
-            if (visitedIds.find(succId) != visitedIds.end()) {
+            if (!visitedIds.contains(succId)) {
                 continue;
             }
             
