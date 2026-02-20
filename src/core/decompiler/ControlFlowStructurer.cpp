@@ -70,7 +70,7 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
     std::unordered_set<uint32_t> processedIds;
     
     for (const auto* block : blocks) {
-        if (processedIds.find(block->getId()) != processedIds.end()) {
+        if (processedIds.contains(block->getId())) {
             continue;
         }
         
@@ -327,7 +327,7 @@ bool ControlFlowStructurer::matchIfThenElse(
     // then the "else" block is actually the merge point, not an else branch.
     // This is an If-Then pattern, not If-Then-Else.
     const auto& thenSuccs = candidateThen->getSuccessors();
-    if (thenSuccs.size() == 1 && thenSuccs.find(candidateElse->getId()) != thenSuccs.end()) {
+    if (thenSuccs.size() == 1 && thenSuccs.contains(candidateElse->getId())) {
         // Then block jumps directly to "else" block - this is If-Then
         return false;
     }
