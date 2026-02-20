@@ -85,6 +85,18 @@ private:
                    X86Instruction& instr, uint8_t opcode);
     bool decodeArithmetic(std::span<const uint8_t> data, size_t& offset,
                          X86Instruction& instr, uint8_t opcode);
+    bool decodeLea(std::span<const uint8_t> data, size_t& offset,
+                   X86Instruction& instr, uint8_t opcode);
+    bool decodeTest(std::span<const uint8_t> data, size_t& offset,
+                    X86Instruction& instr, uint8_t opcode);
+    bool decodeXor(std::span<const uint8_t> data, size_t& offset,
+                   X86Instruction& instr, uint8_t opcode);
+    bool decodeAnd(std::span<const uint8_t> data, size_t& offset,
+                   X86Instruction& instr, uint8_t opcode);
+    bool decodeOr(std::span<const uint8_t> data, size_t& offset,
+                  X86Instruction& instr, uint8_t opcode);
+    bool decodeIncDec(std::span<const uint8_t> data, size_t& offset,
+                      X86Instruction& instr, uint8_t opcode);
     bool decodeLeave(std::span<const uint8_t> data, size_t& offset,
                      X86Instruction& instr);
     bool decodeNop(std::span<const uint8_t> data, size_t& offset,

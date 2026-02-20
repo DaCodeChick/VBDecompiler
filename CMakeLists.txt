@@ -63,7 +63,7 @@ target_compile_features(vbdecompiler PRIVATE cxx_std_23)
 
 # Test executables
 add_executable(test_pe
-    src/test_pe.cpp
+    tests/test_pe.cpp
     src/core/pe/PEFile.cpp
 )
 
@@ -76,7 +76,7 @@ target_include_directories(test_pe PRIVATE
 )
 
 add_executable(test_vb
-    src/test_vb.cpp
+    tests/test_vb.cpp
     src/core/pe/PEFile.cpp
     src/core/vb/VBFile.cpp
 )
@@ -90,7 +90,7 @@ target_include_directories(test_vb PRIVATE
 )
 
 add_executable(test_x86
-    src/test_x86.cpp
+    tests/test_x86.cpp
     src/core/pe/PEFile.cpp
     src/core/vb/VBFile.cpp
     src/core/disasm/x86/X86Instruction.cpp
