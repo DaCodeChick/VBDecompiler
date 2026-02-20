@@ -671,7 +671,7 @@ std::vector<const IRBasicBlock*> ControlFlowStructurer::collectRegionBlocks(
         // Add successors to queue (but only if they're not the exit or exclude block)
         for (uint32_t succId : block->getSuccessors()) {
             // Skip if already visited
-            if (!visitedIds.contains(succId)) {
+            if (visitedIds.contains(succId)) {
                 continue;
             }
             
