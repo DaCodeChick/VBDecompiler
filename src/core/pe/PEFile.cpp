@@ -198,6 +198,12 @@ std::optional<uint32_t> PEFile::rvaToFileOffset(uint32_t rva) const {
 }
 
 std::vector<std::byte> PEFile::readAtRVA(uint32_t rva, size_t size) const {
+    // Sanity check: refuse to allocate more than 100MB
+    constexpr size_t MAX_READ_SIZE = 100 * 1024 * 1024;
+    if (size > MAX_READ_SIZE) {
+        return {};
+    }
+    
     auto rvaData = getRVAData(rva);
     if (!rvaData) {
         return {};
@@ -206,8 +212,19 @@ std::vector<std::byte> PEFile::readAtRVA(uint32_t rva, size_t size) const {
     const auto& sectionData = rvaData->section.get().getData();
     size_t offset = rvaData->offset;
     
+    // Check if offset is within section bounds
+    if (offset >= sectionData.size()) {
+        return {};
+    }
+    
+    // Clamp size to available data
     if (offset + size > sectionData.size()) {
         size = sectionData.size() - offset;
+    }
+    
+    // Final safety check
+    if (size == 0) {
+        return {};
     }
 
     return std::vector<std::byte>(sectionData.begin() + offset,

@@ -282,6 +282,17 @@ bool VBFile::parseProjectInfo() {
     }
 
     uint32_t projectInfoRVA = vaToRVA(vbHeader_.lpProjectInfo);
+    
+    // Sanity check: RVA should be within reasonable bounds
+    if (projectInfoRVA > peFile_->getSections().back().getVirtualAddress() + 
+                         peFile_->getSections().back().getVirtualSize()) {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), 
+                     "Project info RVA 0x%X is out of bounds (VA 0x%X, imageBase 0x%X)", 
+                     projectInfoRVA, vbHeader_.lpProjectInfo, peFile_->getImageBase());
+        setError(buf);
+        return false;
+    }
 
     auto infoOpt = readStructAtRVA<VBProjectInfo>(projectInfoRVA);
     if (!infoOpt) {
