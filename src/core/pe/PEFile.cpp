@@ -132,15 +132,14 @@ bool PEFile::parseImports() {
         return true;
     }
 
-    const PESection* importSection = nullptr;
-    size_t offset = 0;
-    
-    if (!getRVAData(importDir.VirtualAddress, &importSection, &offset)) {
+    auto rvaData = getRVAData(importDir.VirtualAddress);
+    if (!rvaData) {
         // Imports not found, but continue anyway
         return true;
     }
 
-    const auto& sectionData = importSection->getData();
+    const auto& sectionData = rvaData->section->getData();
+    size_t offset = rvaData->offset;
 
     // Parse import directory table
     while (offset + sizeof(ImportDirectoryEntry) <= sectionData.size()) {
@@ -190,25 +189,22 @@ const PESection* PEFile::getSectionByRVA(uint32_t rva) const {
 }
 
 std::optional<uint32_t> PEFile::rvaToFileOffset(uint32_t rva) const {
-    const PESection* section = nullptr;
-    size_t offset = 0;
-    
-    if (!getRVAData(rva, &section, &offset)) {
+    auto rvaData = getRVAData(rva);
+    if (!rvaData) {
         return std::nullopt;
     }
 
-    return section->getRawDataPointer() + static_cast<uint32_t>(offset);
+    return rvaData->section->getRawDataPointer() + static_cast<uint32_t>(rvaData->offset);
 }
 
 std::vector<std::byte> PEFile::readAtRVA(uint32_t rva, size_t size) const {
-    const PESection* section = nullptr;
-    size_t offset = 0;
-    
-    if (!getRVAData(rva, &section, &offset)) {
+    auto rvaData = getRVAData(rva);
+    if (!rvaData) {
         return {};
     }
 
-    const auto& sectionData = section->getData();
+    const auto& sectionData = rvaData->section->getData();
+    size_t offset = rvaData->offset;
     
     if (offset + size > sectionData.size()) {
         size = sectionData.size() - offset;
@@ -242,20 +238,18 @@ void PEFile::setError(const std::string& error) {
     valid_ = false;
 }
 
-bool PEFile::getRVAData(uint32_t rva, const PESection** outSection, size_t* outOffset) const {
+std::optional<PEFile::RVAData> PEFile::getRVAData(uint32_t rva) const {
     const PESection* section = getSectionByRVA(rva);
     if (!section) {
-        return false;
+        return std::nullopt;
     }
     
     int64_t sectionOffset = section->rvaToOffset(rva);
     if (sectionOffset < 0) {
-        return false;
+        return std::nullopt;
     }
     
-    if (outSection) *outSection = section;
-    if (outOffset) *outOffset = static_cast<size_t>(sectionOffset);
-    return true;
+    return RVAData{section, static_cast<size_t>(sectionOffset)};
 }
 
 } // namespace VBDecompiler

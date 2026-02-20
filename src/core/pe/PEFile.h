@@ -138,6 +138,12 @@ public:
     [[nodiscard]] const std::string& getLastError() const { return lastError_; }
 
 private:
+    /// Result type for RVA lookup operations
+    struct RVAData {
+        const PESection* section;
+        size_t offset;
+    };
+
     bool parseDOSHeader();
     bool parsePEHeader();
     bool parseSections();
@@ -148,11 +154,9 @@ private:
     /**
      * @brief Helper to get section and offset for an RVA
      * @param rva Relative Virtual Address
-     * @param outSection Output pointer to section (set if found)
-     * @param outOffset Output offset within section (set if found)
-     * @return true if RVA is valid and section found, false otherwise
+     * @return Optional containing section pointer and offset if RVA is valid
      */
-    [[nodiscard]] bool getRVAData(uint32_t rva, const PESection** outSection, size_t* outOffset) const;
+    [[nodiscard]] std::optional<RVAData> getRVAData(uint32_t rva) const;
 
     std::filesystem::path path_;
     std::vector<std::byte> fileData_;
