@@ -23,6 +23,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CORE_SOURCES
     src/core/pe/PEFile.cpp
     src/core/vb/VBFile.cpp
+    src/core/disasm/x86/X86Instruction.cpp
+    src/core/disasm/x86/X86Disassembler.cpp
 )
 
 set(UI_SOURCES
