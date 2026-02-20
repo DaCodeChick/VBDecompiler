@@ -114,7 +114,6 @@ private:
     
     // Utility functions
     void setError(const std::string& error);
-    PCodeDataType parseTypeChar(char typeChar);
     
     std::string lastError_;
     const VBPublicObjectDescriptor* objectInfo_ = nullptr;

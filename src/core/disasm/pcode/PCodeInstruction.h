@@ -11,6 +11,9 @@
 
 namespace VBDecompiler {
 
+// Forward declaration
+enum class PCodeOpcodeCategory;
+
 /// P-Code operand types
 enum class PCodeOperandType {
     NONE,           // No operand
@@ -125,6 +128,10 @@ public:
     int getStackDelta() const { return stackDelta_; }
     void setStackDelta(int delta) { stackDelta_ = delta; }
     
+    /// Get opcode category
+    PCodeOpcodeCategory getCategory() const { return category_; }
+    void setCategory(PCodeOpcodeCategory cat) { category_ = cat; }
+    
     /// Control flow properties
     bool isBranch() const { return isBranch_; }
     void setIsBranch(bool b) { isBranch_ = b; }
@@ -156,6 +163,7 @@ private:
     std::string mnemonic_;          // Instruction mnemonic
     std::vector<PCodeOperand> operands_;  // Operands
     std::vector<uint8_t> bytes_;    // Raw bytes
+    PCodeOpcodeCategory category_;  // Opcode category
     
     // Stack tracking
     int stackDelta_ = 0;            // Stack depth change

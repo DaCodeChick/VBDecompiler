@@ -30,6 +30,9 @@ set(CORE_SOURCES
     src/core/disasm/x86/X86DecoderControl.cpp
     src/core/disasm/x86/X86DecoderArithmetic.cpp
     src/core/disasm/x86/X86DecoderLogical.cpp
+    src/core/disasm/pcode/PCodeInstruction.cpp
+    src/core/disasm/pcode/PCodeOpcode.cpp
+    src/core/disasm/pcode/PCodeDisassembler.cpp
 )
 
 set(UI_SOURCES
@@ -112,6 +115,23 @@ target_link_libraries(test_x86 PRIVATE
 )
 
 target_include_directories(test_x86 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+add_executable(test_pcode
+    tests/test_pcode.cpp
+    src/core/pe/PEFile.cpp
+    src/core/vb/VBFile.cpp
+    src/core/disasm/pcode/PCodeInstruction.cpp
+    src/core/disasm/pcode/PCodeOpcode.cpp
+    src/core/disasm/pcode/PCodeDisassembler.cpp
+)
+
+target_link_libraries(test_pcode PRIVATE
+    Qt6::Core
+)
+
+target_include_directories(test_pcode PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
