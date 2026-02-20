@@ -25,6 +25,11 @@ set(CORE_SOURCES
     src/core/vb/VBFile.cpp
     src/core/disasm/x86/X86Instruction.cpp
     src/core/disasm/x86/X86Disassembler.cpp
+    src/core/disasm/x86/X86DecoderHelpers.cpp
+    src/core/disasm/x86/X86DecoderData.cpp
+    src/core/disasm/x86/X86DecoderControl.cpp
+    src/core/disasm/x86/X86DecoderArithmetic.cpp
+    src/core/disasm/x86/X86DecoderLogical.cpp
 )
 
 set(UI_SOURCES
@@ -95,6 +100,11 @@ add_executable(test_x86
     src/core/vb/VBFile.cpp
     src/core/disasm/x86/X86Instruction.cpp
     src/core/disasm/x86/X86Disassembler.cpp
+    src/core/disasm/x86/X86DecoderHelpers.cpp
+    src/core/disasm/x86/X86DecoderData.cpp
+    src/core/disasm/x86/X86DecoderControl.cpp
+    src/core/disasm/x86/X86DecoderArithmetic.cpp
+    src/core/disasm/x86/X86DecoderLogical.cpp
 )
 
 target_link_libraries(test_x86 PRIVATE
