@@ -130,8 +130,9 @@ std::string VBCodeGenerator::generateSequence(const StructuredNode* node) {
     std::ostringstream oss;
     
     // Generate code for blocks in this sequence
+    // Skip structural jumps (last GOTO/BRANCH) since these are part of recognized control flow
     for (const auto* block : node->getBlocks()) {
-        oss << generateBasicBlock(block);
+        oss << generateBasicBlock(block, true);  // Skip structural jumps
     }
     
     // Generate code for child nodes
@@ -300,14 +301,27 @@ std::string VBCodeGenerator::generateGotoLabel(const StructuredNode* node) {
 // Basic Block Generation
 // ============================================================================
 
-std::string VBCodeGenerator::generateBasicBlock(const IRBasicBlock* block) {
+std::string VBCodeGenerator::generateBasicBlock(const IRBasicBlock* block, bool skipStructuralJumps) {
     std::ostringstream oss;
     
     if (block == nullptr) {
         return "";
     }
     
-    for (const auto& stmt : block->getStatements()) {
+    const auto& statements = block->getStatements();
+    size_t count = statements.size();
+    
+    for (size_t i = 0; i < count; i++) {
+        const auto& stmt = statements[i];
+        
+        // Skip last GOTO/BRANCH if requested (these are structural control flow)
+        if (skipStructuralJumps && i == count - 1) {
+            IRStatementKind kind = stmt->getKind();
+            if (kind == IRStatementKind::GOTO || kind == IRStatementKind::BRANCH) {
+                continue;
+            }
+        }
+        
         std::string stmtCode = generateStatement(stmt.get());
         if (!stmtCode.empty()) {
             oss << indent(stmtCode) << "\n";

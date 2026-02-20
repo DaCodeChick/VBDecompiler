@@ -70,7 +70,7 @@ private:
     std::string generateGotoLabel(const StructuredNode* node);
     
     // Basic block generation (fallback for unstructured CFG)
-    std::string generateBasicBlock(const IRBasicBlock* block);
+    std::string generateBasicBlock(const IRBasicBlock* block, bool skipStructuralJumps = false);
     
     // Expression generation helpers
     std::string generateConstant(const IRConstant* constant);
