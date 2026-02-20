@@ -116,7 +116,67 @@ int main(int argc, char* argv[]) {
         std::cout << std::endl;
     }
 
+    // Display parsed objects
+    const auto& objects = vbFile.getObjects();
+    if (!objects.empty()) {
+        std::cout << "Parsed Objects (" << objects.size() << "):" << std::endl;
+        std::cout << std::string(80, '-') << std::endl;
+        
+        for (size_t i = 0; i < objects.size(); ++i) {
+            const auto& obj = objects[i];
+            
+            std::cout << "[" << i << "] " << (obj.name.empty() ? "<unnamed>" : obj.name);
+            
+            // Display object type
+            if (obj.isForm()) {
+                std::cout << " (Form)";
+            } else if (obj.isModule()) {
+                std::cout << " (Module)";
+            } else if (obj.isClass()) {
+                std::cout << " (Class)";
+            }
+            std::cout << std::endl;
+            
+            // Display descriptor info
+            const auto& desc = obj.descriptor;
+            std::cout << "  Object Info: 0x" << std::hex << desc.lpObjectInfo << std::dec;
+            if (desc.dwReserved & 0x02) std::cout << " DESIGNER";
+            if (desc.dwReserved & 0x08) std::cout << " CLASS_MODULE";
+            std::cout << std::endl;
+            
+            std::cout << "  Object Type: 0x" << std::hex << desc.fObjectType << std::dec << std::endl;
+            
+            // Display method count
+            if (desc.dwMethodCount > 0) {
+                std::cout << "  Methods (" << desc.dwMethodCount << "):" << std::endl;
+                
+                for (size_t j = 0; j < obj.methodNames.size() && j < desc.dwMethodCount; ++j) {
+                    std::cout << "    [" << j << "] " << obj.methodNames[j] << std::endl;
+                }
+                
+                if (obj.methodNames.size() < desc.dwMethodCount) {
+                    std::cout << "    ... (" << (desc.dwMethodCount - obj.methodNames.size()) 
+                             << " methods not parsed)" << std::endl;
+                }
+            } else {
+                std::cout << "  Methods: none" << std::endl;
+            }
+            
+            // Display optional info (forms with controls)
+            if (obj.hasOptionalInfo() && obj.optionalInfo) {
+                std::cout << "  Optional Info:" << std::endl;
+                std::cout << "    Control Count: " << obj.optionalInfo->dwControlCount << std::endl;
+                std::cout << "    Event Count: " << obj.optionalInfo->wEventCount << std::endl;
+                std::cout << "    Control Array: 0x" << std::hex << obj.optionalInfo->lpControlArray << std::dec << std::endl;
+                std::cout << "    Event Link Array: 0x" << std::hex << obj.optionalInfo->lpEventLinkArray << std::dec << std::endl;
+            }
+            
+            std::cout << std::endl;
+        }
+    }
+
     // Summary
+    std::cout << std::string(80, '=') << std::endl;
     std::cout << "Summary:" << std::endl;
     std::cout << "  VB Version: " << (hasVBRuntime ? "VB5/VB6" : "Unknown") << std::endl;
     std::cout << "  Compilation Mode: ";
@@ -128,6 +188,12 @@ int main(int argc, char* argv[]) {
         std::cout << "Unknown" << std::endl;
     }
     std::cout << "  Objects: " << vbFile.getObjectCount() << std::endl;
+    std::cout << "  Forms: " << std::count_if(objects.begin(), objects.end(), 
+                                               [](const VBObject& o) { return o.isForm(); }) << std::endl;
+    std::cout << "  Modules: " << std::count_if(objects.begin(), objects.end(), 
+                                                 [](const VBObject& o) { return o.isModule(); }) << std::endl;
+    std::cout << "  Classes: " << std::count_if(objects.begin(), objects.end(), 
+                                                 [](const VBObject& o) { return o.isClass(); }) << std::endl;
 
     return 0;
 }

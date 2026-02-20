@@ -37,6 +37,11 @@ bool VBFile::parse() {
     if (!parseObjectTable()) {
         return false;
     }
+    
+    // Parse all objects (forms, modules, classes)
+    if (!parseObjects()) {
+        return false;
+    }
 
     valid_ = true;
     return true;
@@ -66,6 +71,112 @@ bool VBFile::findVBHeader() {
     }
 
     return false;
+}
+
+bool VBFile::parseObjects() {
+    if (!objectTableHeader_ || objectTableHeader_->wTotalObjects == 0) {
+        // No objects to parse (shouldn't happen in valid VB files)
+        return true;
+    }
+    
+    uint32_t imageBase = peFile_->getImageBase();
+    uint32_t objectArrayRVA = objectTableHeader_->lpObjectArray - imageBase;
+    
+    // Parse each object descriptor
+    for (uint16_t i = 0; i < objectTableHeader_->wTotalObjects; ++i) {
+        uint32_t objRVA = objectArrayRVA + (i * sizeof(VBPublicObjectDescriptor));
+        
+        auto objDescOpt = readStructAtRVA<VBPublicObjectDescriptor>(objRVA);
+        if (!objDescOpt) {
+            // Skip invalid objects
+            continue;
+        }
+        
+        VBObject obj;
+        obj.descriptor = *objDescOpt;
+        obj.objectIndex = i;
+        
+        // Parse object name
+        if (obj.descriptor.lpszObjectName != 0) {
+            uint32_t nameRVA = obj.descriptor.lpszObjectName - imageBase;
+            obj.name = readStringAtRVA(nameRVA);
+        }
+        
+        // Parse object info
+        if (obj.descriptor.lpObjectInfo != 0) {
+            uint32_t infoRVA = obj.descriptor.lpObjectInfo - imageBase;
+            parseObjectInfo(obj, infoRVA);
+        }
+        
+        // Parse optional info (for forms with controls)
+        if (obj.hasOptionalInfo() && obj.info) {
+            // OptionalInfo follows ObjectInfo structure
+            uint32_t optInfoRVA = obj.descriptor.lpObjectInfo - imageBase + sizeof(VBObjectInfo);
+            parseOptionalObjectInfo(obj, optInfoRVA);
+        }
+        
+        // Parse method names
+        parseMethodNames(obj);
+        
+        objects_.push_back(std::move(obj));
+    }
+    
+    return true;
+}
+
+bool VBFile::parseObjectInfo(VBObject& obj, uint32_t rva) {
+    auto infoOpt = readStructAtRVA<VBObjectInfo>(rva);
+    if (!infoOpt) {
+        return false;
+    }
+    
+    obj.info = *infoOpt;
+    return true;
+}
+
+bool VBFile::parseOptionalObjectInfo(VBObject& obj, uint32_t rva) {
+    auto optInfoOpt = readStructAtRVA<VBOptionalObjectInfo>(rva);
+    if (!optInfoOpt) {
+        return false;
+    }
+    
+    obj.optionalInfo = *optInfoOpt;
+    return true;
+}
+
+bool VBFile::parseMethodNames(VBObject& obj) {
+    if (obj.descriptor.dwMethodCount == 0 || obj.descriptor.lpMethodNamesArray == 0) {
+        return true;  // No methods
+    }
+    
+    uint32_t imageBase = peFile_->getImageBase();
+    uint32_t namesArrayRVA = obj.descriptor.lpMethodNamesArray - imageBase;
+    
+    // Read array of method name pointers
+    for (uint32_t i = 0; i < obj.descriptor.dwMethodCount; ++i) {
+        uint32_t entryRVA = namesArrayRVA + (i * sizeof(VBMethodName));
+        
+        auto nameEntry = readStructAtRVA<VBMethodName>(entryRVA);
+        if (!nameEntry || nameEntry->lpMethodName == 0) {
+            obj.methodNames.push_back("<unknown>");
+            continue;
+        }
+        
+        uint32_t methodNameRVA = nameEntry->lpMethodName - imageBase;
+        std::string methodName = readStringAtRVA(methodNameRVA);
+        obj.methodNames.push_back(methodName.empty() ? "<unnamed>" : methodName);
+    }
+    
+    return true;
+}
+
+const VBObject* VBFile::getObjectByName(const std::string& name) const {
+    for (const auto& obj : objects_) {
+        if (obj.name == name) {
+            return &obj;
+        }
+    }
+    return nullptr;
 }
 
 bool VBFile::parseVBHeader() {

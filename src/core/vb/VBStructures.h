@@ -133,6 +133,85 @@ struct VBObjectInfo {
     uint32_t lpConstants;           // 0x34 - Constants pointer
 };  // Size: 0x38 (56 bytes)
 
+/**
+ * @brief Optional Object Information
+ * 
+ * Additional information for forms and controls (present when ObjectType & 0x80).
+ */
+struct VBOptionalObjectInfo {
+    uint32_t dwDesignerFlag;        // 0x00 - Designer flag (2 = designer)
+    uint32_t lpObjectCLSID;         // 0x04 - Object CLSID pointer
+    uint32_t dwNull1;               // 0x08 - Null
+    uint32_t lpGuidObjectGUI;       // 0x0C - GUI GUID pointer
+    uint32_t dwDefaultIIDCount;     // 0x10 - Default IID count
+    uint32_t lpEventsIIDTable;      // 0x14 - Events IID table pointer
+    uint32_t dwEventsIIDCount;      // 0x18 - Events IID count
+    uint32_t lpDefaultIIDTable;     // 0x1C - Default IID table pointer
+    uint32_t dwControlCount;        // 0x20 - Control count
+    uint32_t lpControlArray;        // 0x24 - Control array pointer
+    uint16_t wEventCount;           // 0x28 - Number of events
+    uint16_t wPCodeCount;           // 0x2A - P-Code count
+    uint16_t wInitializeEvent;      // 0x2C - Initialize event offset
+    uint16_t wTerminateEvent;       // 0x2E - Terminate event offset
+    uint32_t lpEventLinkArray;      // 0x30 - Event link array pointer
+    uint32_t lpBasicClassObject;    // 0x34 - Basic class object pointer
+    uint32_t dwNull2;               // 0x38 - Null
+    uint32_t dwFlags;               // 0x3C - Flags
+};  // Size: 0x40 (64 bytes)
+
+/**
+ * @brief Procedure Descriptor Information (P-Code)
+ * 
+ * Describes a procedure/method in P-Code format.
+ */
+struct VBProcDescInfo {
+    uint32_t lpTable;               // 0x00 - Table pointer
+    uint16_t wReserved1;            // 0x04 - Reserved
+    uint16_t wFrameSize;            // 0x06 - Stack frame size
+    uint16_t wProcSize;             // 0x08 - Procedure size in bytes
+    uint16_t wReserved2;            // 0x0A - Reserved
+    uint16_t wReserved3;            // 0x0C - Reserved
+    uint16_t wReserved4;            // 0x0E - Reserved
+    uint16_t wReserved5;            // 0x10 - Reserved
+    uint16_t wReserved6;            // 0x12 - Reserved
+    uint16_t wReserved7;            // 0x14 - Reserved
+    uint16_t wReserved8;            // 0x16 - Reserved
+    uint16_t wReserved9;            // 0x18 - Reserved
+    uint16_t wReserved10;           // 0x1A - Reserved
+    uint16_t wFlags;                // 0x1C - Flags
+};  // Size: 0x1E (30 bytes)
+
+/**
+ * @brief Control Descriptor
+ * 
+ * Describes a control on a form.
+ */
+struct VBControlInfo {
+    uint16_t wDlgProcIndex;         // 0x00 - Dialog procedure index
+    uint16_t wReserved1;            // 0x02 - Reserved
+    uint32_t lpControlName;         // 0x04 - Control name pointer
+    uint32_t lpIdeData;             // 0x08 - IDE data pointer
+    uint32_t lpIndex;               // 0x0C - Index pointer
+    uint32_t lpTypeInfo;            // 0x10 - Type info pointer
+    uint32_t lpGuidControl;         // 0x14 - Control GUID pointer
+    uint32_t dwPosition;            // 0x18 - Position/size data
+    uint32_t dwFlags;               // 0x1C - Flags
+    uint16_t wControlIndex;         // 0x20 - Control index
+    uint16_t wReserved2;            // 0x22 - Reserved
+    uint32_t dwExtent;              // 0x24 - Extent data
+    uint32_t lpNext;                // 0x28 - Next control pointer
+};  // Size: 0x2C (44 bytes)
+
+/**
+ * @brief Method/Procedure Name Entry
+ * 
+ * Entry in the method names array for an object.
+ */
+struct VBMethodName {
+    uint32_t lpMethodName;          // 0x00 - Method name pointer
+    uint32_t dwFlags;               // 0x04 - Flags (visibility, type, etc.)
+};  // Size: 0x08 (8 bytes)
+
 #pragma pack(pop)
 
 // Constants

@@ -12,6 +12,36 @@
 namespace VBDecompiler {
 
 /**
+ * @brief Parsed VB Object with metadata
+ * 
+ * High-level representation of a VB object (form, module, class).
+ */
+struct VBObject {
+    VBPublicObjectDescriptor descriptor;
+    std::optional<VBObjectInfo> info;
+    std::optional<VBOptionalObjectInfo> optionalInfo;
+    std::string name;
+    std::vector<std::string> methodNames;
+    uint32_t objectIndex = 0;
+    
+    [[nodiscard]] bool isForm() const {
+        return (descriptor.fObjectType & 0x10) != 0;
+    }
+    
+    [[nodiscard]] bool isModule() const {
+        return (descriptor.fObjectType & 0x01) != 0;
+    }
+    
+    [[nodiscard]] bool isClass() const {
+        return (descriptor.fObjectType & 0x02) != 0;
+    }
+    
+    [[nodiscard]] bool hasOptionalInfo() const {
+        return (descriptor.fObjectType & 0x80) != 0;
+    }
+};
+
+/**
  * @brief VB5/6 binary file parser
  * 
  * Detects and parses Visual Basic 5/6 specific structures within PE executables.
@@ -102,12 +132,33 @@ public:
      * @brief Get the RVA where VB header was found
      */
     [[nodiscard]] uint32_t getVBHeaderRVA() const { return vbHeaderRVA_; }
+    
+    /**
+     * @brief Get all parsed objects (forms, modules, classes)
+     */
+    [[nodiscard]] const std::vector<VBObject>& getObjects() const { return objects_; }
+    
+    /**
+     * @brief Get object by index
+     */
+    [[nodiscard]] const VBObject* getObject(size_t index) const {
+        return index < objects_.size() ? &objects_[index] : nullptr;
+    }
+    
+    /**
+     * @brief Get object by name
+     */
+    [[nodiscard]] const VBObject* getObjectByName(const std::string& name) const;
 
 private:
     bool findVBHeader();
     bool parseVBHeader();
     bool parseProjectInfo();
     bool parseObjectTable();
+    bool parseObjects();
+    bool parseObjectInfo(VBObject& obj, uint32_t rva);
+    bool parseOptionalObjectInfo(VBObject& obj, uint32_t rva);
+    bool parseMethodNames(VBObject& obj);
 
     /**
      * @brief Read a structure at an RVA
@@ -147,6 +198,7 @@ private:
     VBHeader vbHeader_{};
     std::optional<VBProjectInfo> projectInfo_;
     std::optional<VBObjectTableHeader> objectTableHeader_;
+    std::vector<VBObject> objects_;
 };
 
 } // namespace VBDecompiler
