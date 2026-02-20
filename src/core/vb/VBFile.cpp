@@ -79,8 +79,7 @@ bool VBFile::parseObjects() {
         return true;
     }
     
-    uint32_t imageBase = peFile_->getImageBase();
-    uint32_t objectArrayRVA = objectTableHeader_->lpObjectArray - imageBase;
+    uint32_t objectArrayRVA = vaToRVA(objectTableHeader_->lpObjectArray);
     
     // Parse each object descriptor
     for (uint16_t i = 0; i < objectTableHeader_->wTotalObjects; ++i) {
@@ -98,20 +97,18 @@ bool VBFile::parseObjects() {
         
         // Parse object name
         if (obj.descriptor.lpszObjectName != 0) {
-            uint32_t nameRVA = obj.descriptor.lpszObjectName - imageBase;
-            obj.name = readStringAtRVA(nameRVA);
+            obj.name = readStringAtRVA(vaToRVA(obj.descriptor.lpszObjectName));
         }
         
         // Parse object info
         if (obj.descriptor.lpObjectInfo != 0) {
-            uint32_t infoRVA = obj.descriptor.lpObjectInfo - imageBase;
-            parseObjectInfo(obj, infoRVA);
+            parseObjectInfo(obj, vaToRVA(obj.descriptor.lpObjectInfo));
         }
         
         // Parse optional info (for forms with controls)
         if (obj.hasOptionalInfo() && obj.info) {
             // OptionalInfo follows ObjectInfo structure
-            uint32_t optInfoRVA = obj.descriptor.lpObjectInfo - imageBase + sizeof(VBObjectInfo);
+            uint32_t optInfoRVA = vaToRVA(obj.descriptor.lpObjectInfo) + sizeof(VBObjectInfo);
             parseOptionalObjectInfo(obj, optInfoRVA);
         }
         
@@ -149,8 +146,7 @@ bool VBFile::parseMethodNames(VBObject& obj) {
         return true;  // No methods
     }
     
-    uint32_t imageBase = peFile_->getImageBase();
-    uint32_t namesArrayRVA = obj.descriptor.lpMethodNamesArray - imageBase;
+    uint32_t namesArrayRVA = vaToRVA(obj.descriptor.lpMethodNamesArray);
     
     // Read array of method name pointers
     for (uint32_t i = 0; i < obj.descriptor.dwMethodCount; ++i) {
@@ -162,8 +158,7 @@ bool VBFile::parseMethodNames(VBObject& obj) {
             continue;
         }
         
-        uint32_t methodNameRVA = nameEntry->lpMethodName - imageBase;
-        std::string methodName = readStringAtRVA(methodNameRVA);
+        std::string methodName = readStringAtRVA(vaToRVA(nameEntry->lpMethodName));
         obj.methodNames.push_back(methodName.empty() ? "<unnamed>" : methodName);
     }
     
@@ -203,16 +198,14 @@ bool VBFile::parseProjectInfo() {
         return false;
     }
 
-    // VB addresses are relative to image base
-    uint32_t imageBase = peFile_->getImageBase();
-    uint32_t projectInfoRVA = vbHeader_.lpProjectInfo - imageBase;
+    uint32_t projectInfoRVA = vaToRVA(vbHeader_.lpProjectInfo);
 
     auto infoOpt = readStructAtRVA<VBProjectInfo>(projectInfoRVA);
     if (!infoOpt) {
         char buf[256];
         std::snprintf(buf, sizeof(buf), 
                      "Failed to read project info at RVA 0x%X (VA 0x%X, imageBase 0x%X)", 
-                     projectInfoRVA, vbHeader_.lpProjectInfo, imageBase);
+                     projectInfoRVA, vbHeader_.lpProjectInfo, peFile_->getImageBase());
         setError(buf);
         return false;
     }
@@ -231,9 +224,7 @@ bool VBFile::parseObjectTable() {
         return false;
     }
 
-    // VB addresses are relative to image base
-    uint32_t imageBase = peFile_->getImageBase();
-    uint32_t objectTableRVA = projectInfo_->lpObjectTable - imageBase;
+    uint32_t objectTableRVA = vaToRVA(projectInfo_->lpObjectTable);
 
     auto tableOpt = readStructAtRVA<VBObjectTableHeader>(objectTableRVA);
     if (!tableOpt) {
@@ -251,13 +242,9 @@ std::string VBFile::getProjectName() const {
         return "";
     }
 
-    // Try to read project name from various locations
-    uint32_t imageBase = peFile_->getImageBase();
-
     // Try bSZProjectName from VB header
     if (vbHeader_.bSZProjectName != 0) {
-        uint32_t nameRVA = vbHeader_.bSZProjectName - imageBase;
-        std::string name = readStringAtRVA(nameRVA);
+        std::string name = readStringAtRVA(vaToRVA(vbHeader_.bSZProjectName));
         if (!name.empty()) {
             return name;
         }

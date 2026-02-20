@@ -187,6 +187,15 @@ private:
     std::string readStringAtRVA(uint32_t rva, size_t maxLength = 256) const;
 
     void setError(const std::string& error);
+    
+    /**
+     * @brief Convert Virtual Address to Relative Virtual Address
+     * @param va Virtual address (pointer value from VB structures)
+     * @return RVA for use with PE file functions
+     */
+    [[nodiscard]] uint32_t vaToRVA(uint32_t va) const {
+        return va - peFile_->getImageBase();
+    }
 
     std::unique_ptr<PEFile> peFile_;
     bool valid_ = false;
