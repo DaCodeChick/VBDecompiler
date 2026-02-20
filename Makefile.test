@@ -1,0 +1,33 @@
+# Simple Makefile for testing PE parser without Qt
+CXX = g++
+CXXFLAGS = -std=c++20 -Wall -Wextra -I./src -g
+LDFLAGS =
+
+# Source files
+PE_SOURCES = src/core/pe/PEFile.cpp
+TEST_SOURCES = src/test_pe.cpp
+
+# Object files
+PE_OBJECTS = $(PE_SOURCES:.cpp=.o)
+TEST_OBJECTS = $(TEST_SOURCES:.cpp=.o)
+
+# Target
+TARGET = test_pe
+
+.PHONY: all clean test
+
+all: $(TARGET)
+
+$(TARGET): $(PE_OBJECTS) $(TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+clean:
+	rm -f $(PE_OBJECTS) $(TEST_OBJECTS) $(TARGET)
+
+test: $(TARGET)
+	./$(TARGET) "/home/admin/.wine/drive_c/Program Files (x86)/Brainhouse Labs/Phalanx/Phalanx.exe"
+
+.PHONY: all clean test

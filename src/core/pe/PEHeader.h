@@ -81,7 +81,7 @@ struct OptionalHeader32 {
     uint32_t SizeOfHeapCommit;
     uint32_t LoaderFlags;
     uint32_t NumberOfRvaAndSizes;
-    DataDirectory DataDirectory[16];
+    DataDirectory DataDir[16];
 };
 
 // PE Header (NT Headers)

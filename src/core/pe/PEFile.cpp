@@ -127,7 +127,7 @@ bool PEFile::parseSections() {
 
 bool PEFile::parseImports() {
     // Get import directory
-    const auto& importDir = peHeader_.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    const auto& importDir = peHeader_.OptionalHeader.DataDir[IMAGE_DIRECTORY_ENTRY_IMPORT];
     
     if (importDir.VirtualAddress == 0 || importDir.Size == 0) {
         // No imports (unlikely for VB executables, but not an error)
