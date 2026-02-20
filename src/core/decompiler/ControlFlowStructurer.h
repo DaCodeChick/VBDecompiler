@@ -162,10 +162,6 @@ private:
     
     // CFG analysis helpers
     std::vector<const IRBasicBlock*> getBlocksInPostOrder(const IRFunction& function) const;
-    std::unordered_set<const IRBasicBlock*> getDominators(
-        const IRBasicBlock* block,
-        const IRFunction& function
-    ) const;
     
     bool isBackEdge(
         const IRBasicBlock* from,

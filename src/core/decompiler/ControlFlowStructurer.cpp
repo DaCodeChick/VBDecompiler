@@ -587,17 +587,6 @@ std::vector<const IRBasicBlock*> ControlFlowStructurer::getBlocksInPostOrder(con
     return result;
 }
 
-std::unordered_set<const IRBasicBlock*> ControlFlowStructurer::getDominators(
-    const IRBasicBlock* block,
-    const IRFunction& function
-) const {
-    // Simplified dominator computation
-    // A full implementation would use iterative dataflow analysis
-    std::unordered_set<const IRBasicBlock*> dominators;
-    dominators.insert(block);
-    return dominators;
-}
-
 bool ControlFlowStructurer::isBackEdge(
     const IRBasicBlock* from,
     const IRBasicBlock* to,
