@@ -79,6 +79,39 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
         const IRBasicBlock* bodyBlock = nullptr;
         const IRBasicBlock* exitBlock = nullptr;
         
+        // Try While loop (check before If/Then/Else since loops have back edges)
+        if (matchWhileLoop(block, function, bodyBlock, exitBlock)) {
+            auto whileNode = std::make_unique<StructuredNode>(StructuredNodeKind::WHILE);
+            
+            // Get condition from branch statement
+            const IRStatement* branchStmt = nullptr;
+            for (const auto& stmt : block->getStatements()) {
+                if (stmt->getKind() == IRStatementKind::BRANCH) {
+                    branchStmt = stmt.get();
+                    break;
+                }
+            }
+            
+            if (branchStmt) {
+                whileNode->setCondition(branchStmt->getCondition());
+            }
+            
+            // Note: Don't add the condition block itself, as it contains BRANCH/GOTO
+            // statements that should not be generated. The condition is already extracted.
+            
+            // Create child node for loop body
+            if (bodyBlock) {
+                auto bodyNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
+                bodyNode->addBlock(bodyBlock);
+                whileNode->addChild(std::move(bodyNode));
+                processed.insert(bodyBlock);
+            }
+            
+            root->addChild(std::move(whileNode));
+            processed.insert(block);
+            continue;
+        }
+        
         // Try If-Then-Else
         if (matchIfThenElse(block, function, thenBlock, elseBlock, mergeBlock)) {
             auto ifNode = std::make_unique<StructuredNode>(StructuredNodeKind::IF_THEN_ELSE);
@@ -142,29 +175,6 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
             }
             
             root->addChild(std::move(ifNode));
-            processed.insert(block);
-            continue;
-        }
-        
-        // Try While loop
-        if (matchWhileLoop(block, function, bodyBlock, exitBlock)) {
-            auto whileNode = std::make_unique<StructuredNode>(StructuredNodeKind::WHILE);
-            
-            // Get condition from branch statement
-            if (!block->getStatements().empty()) {
-                const auto* lastStmt = block->getStatements().back().get();
-                if (lastStmt->getKind() == IRStatementKind::BRANCH) {
-                    whileNode->setCondition(lastStmt->getCondition());
-                }
-            }
-            
-            whileNode->addBlock(block);
-            if (bodyBlock) {
-                whileNode->addBlock(bodyBlock);
-                processed.insert(bodyBlock);
-            }
-            
-            root->addChild(std::move(whileNode));
             processed.insert(block);
             continue;
         }
@@ -307,20 +317,36 @@ bool ControlFlowStructurer::matchWhileLoop(
         return false;
     }
     
-    // Check if last statement is a branch
-    if (block->getStatements().empty()) {
+    // Check if block has statements
+    const auto& statements = block->getStatements();
+    if (statements.empty()) {
         return false;
     }
     
-    const auto* lastStmt = block->getStatements().back().get();
-    if (lastStmt->getKind() != IRStatementKind::BRANCH) {
+    // Look for a BRANCH statement
+    const IRStatement* branchStmt = nullptr;
+    for (const auto& stmt : statements) {
+        if (stmt->getKind() == IRStatementKind::BRANCH) {
+            branchStmt = stmt.get();
+            break;
+        }
+    }
+    
+    if (!branchStmt) {
         return false;
     }
     
+    // Get the target of the BRANCH statement
+    uint32_t branchTargetId = branchStmt->getTargetBlockId();
+    
+    // Get the two successors
     auto it = successors.begin();
-    const auto* succ1 = getBlockById(*it, function);
+    uint32_t succ1Id = *it;
     ++it;
-    const auto* succ2 = getBlockById(*it, function);
+    uint32_t succ2Id = *it;
+    
+    const auto* succ1 = getBlockById(succ1Id, function);
+    const auto* succ2 = getBlockById(succ2Id, function);
     
     if (!succ1 || !succ2) {
         return false;
@@ -330,19 +356,16 @@ bool ControlFlowStructurer::matchWhileLoop(
     bool succ1IsBackEdge = isBackEdge(succ1, block, function);
     bool succ2IsBackEdge = isBackEdge(succ2, block, function);
     
-    if (succ1IsBackEdge) {
+    // The branch target should be the body (continue loop), the other is exit
+    if (succ1Id == branchTargetId) {
         bodyBlock = succ1;
         exitBlock = succ2;
-        return true;
-    }
-    
-    if (succ2IsBackEdge) {
+        return succ1IsBackEdge; // Only match if it's actually a loop
+    } else {
         bodyBlock = succ2;
         exitBlock = succ1;
-        return true;
+        return succ2IsBackEdge; // Only match if it's actually a loop
     }
-    
-    return false;
 }
 
 std::vector<const IRBasicBlock*> ControlFlowStructurer::getBlocksInPostOrder(const IRFunction& function) const {
@@ -396,22 +419,32 @@ bool ControlFlowStructurer::isBackEdge(
     const IRBasicBlock* to,
     const IRFunction& function
 ) const {
-    // A back edge is an edge from a block to one of its predecessors
-    // Simplified: check if 'to' has a path back to 'from'
+    // A back edge is an edge where the destination (to) can reach back to itself
+    // through the source (from). In simpler terms, if 'from' has 'to' as a successor,
+    // and 'to' has 'from' as a predecessor, and 'to' is an ancestor of 'from' in the
+    // dominator tree, it's a back edge.
     
+    // Simplified approach: if 'from' points to 'to', and 'to' has a lower or equal ID
+    // than 'from', it's likely a back edge (loop back to header).
+    // This works for simple loops where the header comes before the body in block order.
+    
+    // Check if there's an edge from 'from' to 'to'
     const auto& fromSuccs = from->getSuccessors();
+    bool hasEdge = false;
     for (uint32_t succId : fromSuccs) {
         if (succId == to->getId()) {
-            // Direct edge from 'from' to 'to'
-            // Check if 'to' can reach 'from' (cycle)
-            const auto& toPreds = to->getPredecessors();
-            if (toPreds.find(from->getId()) != toPreds.end()) {
-                return true;
-            }
+            hasEdge = true;
+            break;
         }
     }
     
-    return false;
+    if (!hasEdge) {
+        return false;
+    }
+    
+    // Check if this creates a cycle: does 'to' have 'from' in its descendants?
+    // Simple heuristic: if 'to' has a lower ID, it's likely a back edge
+    return to->getId() <= from->getId();
 }
 
 const IRBasicBlock* ControlFlowStructurer::getBlockById(uint32_t id, const IRFunction& function) const {

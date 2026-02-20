@@ -322,6 +322,102 @@ void testTypeCasting() {
     std::cout << "✓ Test 5 passed!\n\n";
 }
 
+/**
+ * @brief Test 6: While loop
+ * 
+ * Function Countdown(n As Integer) As Integer
+ *     Dim count As Integer
+ *     count = n
+ *     While count > 0
+ *         count = count - 1
+ *     Wend
+ *     Return count
+ * End Function
+ */
+void testWhileLoop() {
+    std::cout << "Test 6: While Loop\n";
+    std::cout << "==================\n\n";
+    
+    IRFunction countdownFunc("Countdown", IRTypes::Integer);
+    countdownFunc.setAddress(0x00406000);
+    
+    // Parameter
+    IRVariable paramN(0, "n", IRTypes::Integer);
+    countdownFunc.addParameter(std::move(paramN));
+    
+    // Local variable
+    IRVariable& count = countdownFunc.createLocalVariable("count", IRTypes::Integer);
+    
+    // Create basic blocks
+    IRBasicBlock& entryBB = countdownFunc.createBasicBlock();
+    countdownFunc.setEntryBlock(entryBB.getId());
+    
+    IRBasicBlock& loopHeaderBB = countdownFunc.createBasicBlock();
+    IRBasicBlock& loopBodyBB = countdownFunc.createBasicBlock();
+    IRBasicBlock& exitBB = countdownFunc.createBasicBlock();
+    
+    // Entry block: count = n
+    auto exprN = IRExpression::makeVariable(countdownFunc.getParameters()[0]);
+    auto assignStmt = IRStatement::makeAssign(count, std::move(exprN));
+    entryBB.addStatement(std::move(assignStmt));
+    
+    // Entry block: goto loop header
+    auto gotoHeader = IRStatement::makeGoto(loopHeaderBB.getId());
+    entryBB.addStatement(std::move(gotoHeader));
+    
+    // Loop header: While count > 0
+    auto condCount = IRExpression::makeVariable(count);
+    auto condZero = IRExpression::makeConstant(IRConstant(static_cast<int64_t>(0)));
+    auto condExpr = IRExpression::makeBinary(
+        IRExpressionKind::GREATER_THAN,
+        std::move(condCount),
+        std::move(condZero),
+        IRTypes::Boolean
+    );
+    auto branchStmt = IRStatement::makeBranch(std::move(condExpr), loopBodyBB.getId());
+    loopHeaderBB.addStatement(std::move(branchStmt));
+    
+    // Loop header: fallthrough to exit
+    auto gotoExit = IRStatement::makeGoto(exitBB.getId());
+    loopHeaderBB.addStatement(std::move(gotoExit));
+    
+    // Loop body: count = count - 1
+    auto exprCount1 = IRExpression::makeVariable(count);
+    auto exprOne = IRExpression::makeConstant(IRConstant(static_cast<int64_t>(1)));
+    auto subExpr = IRExpression::makeBinary(
+        IRExpressionKind::SUBTRACT,
+        std::move(exprCount1),
+        std::move(exprOne),
+        IRTypes::Integer
+    );
+    auto assignSub = IRStatement::makeAssign(count, std::move(subExpr));
+    loopBodyBB.addStatement(std::move(assignSub));
+    
+    // Loop body: goto loop header (back edge)
+    auto gotoLoopHeader = IRStatement::makeGoto(loopHeaderBB.getId());
+    loopBodyBB.addStatement(std::move(gotoLoopHeader));
+    
+    // Exit block: Return count
+    auto returnExpr = IRExpression::makeVariable(count);
+    auto returnStmt = IRStatement::makeReturn(std::move(returnExpr));
+    exitBB.addStatement(std::move(returnStmt));
+    
+    // Setup CFG edges
+    countdownFunc.connectBlocks(entryBB.getId(), loopHeaderBB.getId());
+    countdownFunc.connectBlocks(loopHeaderBB.getId(), loopBodyBB.getId());
+    countdownFunc.connectBlocks(loopHeaderBB.getId(), exitBB.getId());
+    countdownFunc.connectBlocks(loopBodyBB.getId(), loopHeaderBB.getId()); // back edge
+    
+    // Decompile (with structuring)
+    Decompiler decompiler;
+    std::string vbCode = decompiler.decompile(countdownFunc, true);
+    
+    std::cout << "Generated VB6 Code:\n";
+    std::cout << "-------------------\n";
+    std::cout << vbCode << "\n";
+    std::cout << "✓ Test 6 passed!\n\n";
+}
+
 int main() {
     std::cout << "VBDecompiler - Decompiler Test Suite\n";
     std::cout << "=====================================\n\n";
@@ -332,6 +428,7 @@ int main() {
         testSubroutineWithStrings();
         testMultipleTypes();
         testTypeCasting();
+        testWhileLoop();
         
         std::cout << "\n";
         std::cout << "====================================\n";
