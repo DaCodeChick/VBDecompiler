@@ -38,6 +38,7 @@ set(CORE_SOURCES
     src/core/ir/IRExpression.cpp
     src/core/ir/IRStatement.cpp
     src/core/ir/IRFunction.cpp
+    src/core/ir/PCodeLifter.cpp
 )
 
 set(UI_SOURCES
@@ -151,6 +152,23 @@ add_executable(test_ir
 )
 
 target_include_directories(test_ir PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Lifter test
+add_executable(test_lifter
+    tests/test_lifter.cpp
+    src/core/disasm/pcode/PCodeInstruction.cpp
+    src/core/disasm/pcode/PCodeOpcode.cpp
+    src/core/disasm/pcode/PCodeDisassembler.cpp
+    src/core/ir/IRType.cpp
+    src/core/ir/IRExpression.cpp
+    src/core/ir/IRStatement.cpp
+    src/core/ir/IRFunction.cpp
+    src/core/ir/PCodeLifter.cpp
+)
+
+target_include_directories(test_lifter PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
