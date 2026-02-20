@@ -84,20 +84,32 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
             auto ifNode = std::make_unique<StructuredNode>(StructuredNodeKind::IF_THEN_ELSE);
             
             // Get condition from branch statement
-            if (!block->getStatements().empty()) {
-                const auto* lastStmt = block->getStatements().back().get();
-                if (lastStmt->getKind() == IRStatementKind::BRANCH) {
-                    ifNode->setCondition(lastStmt->getCondition());
+            const IRStatement* branchStmt = nullptr;
+            for (const auto& stmt : block->getStatements()) {
+                if (stmt->getKind() == IRStatementKind::BRANCH) {
+                    branchStmt = stmt.get();
+                    break;
                 }
             }
             
-            ifNode->addBlock(block);
+            if (branchStmt) {
+                ifNode->setCondition(branchStmt->getCondition());
+            }
+            
+            // Note: Don't add the condition block itself, as it contains BRANCH/GOTO
+            // statements that should not be generated. The condition is already extracted.
+            
+            // Create child nodes for then and else branches
             if (thenBlock) {
-                ifNode->addBlock(thenBlock);
+                auto thenNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
+                thenNode->addBlock(thenBlock);
+                ifNode->addChild(std::move(thenNode));
                 processed.insert(thenBlock);
             }
             if (elseBlock) {
-                ifNode->addBlock(elseBlock);
+                auto elseNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
+                elseNode->addBlock(elseBlock);
+                ifNode->addChild(std::move(elseNode));
                 processed.insert(elseBlock);
             }
             
@@ -118,9 +130,14 @@ std::unique_ptr<StructuredNode> ControlFlowStructurer::analyzeRegion(
                 }
             }
             
-            ifNode->addBlock(block);
+            // Note: Don't add the condition block itself, as it contains BRANCH/GOTO
+            // statements that should not be generated. The condition is already extracted.
+            
+            // Create child node for then branch
             if (thenBlock) {
-                ifNode->addBlock(thenBlock);
+                auto thenNode = std::make_unique<StructuredNode>(StructuredNodeKind::SEQUENCE);
+                thenNode->addBlock(thenBlock);
+                ifNode->addChild(std::move(thenNode));
                 processed.insert(thenBlock);
             }
             
@@ -170,36 +187,56 @@ bool ControlFlowStructurer::matchIfThenElse(
     const IRBasicBlock*& mergeBlock
 ) {
     // Pattern: block has 2 successors (then and else branches)
-    // Both branches converge to a merge block
+    // Both branches converge to a merge block (optional)
     
     const auto& successors = block->getSuccessors();
     if (successors.size() != 2) {
         return false;
     }
     
-    // Check if last statement is a branch
-    if (block->getStatements().empty()) {
+    // Check if block has statements
+    const auto& statements = block->getStatements();
+    if (statements.empty()) {
         return false;
     }
     
-    const auto* lastStmt = block->getStatements().back().get();
-    if (lastStmt->getKind() != IRStatementKind::BRANCH) {
+    // Look for a BRANCH statement
+    const IRStatement* branchStmt = nullptr;
+    for (const auto& stmt : statements) {
+        if (stmt->getKind() == IRStatementKind::BRANCH) {
+            branchStmt = stmt.get();
+            break;
+        }
+    }
+    
+    if (!branchStmt) {
         return false;
     }
     
-    // Get then and else blocks
+    // Get the target of the BRANCH statement (this is the "then" block)
+    uint32_t branchTargetId = branchStmt->getTargetBlockId();
+    
+    // Get the two successors
     auto it = successors.begin();
-    const auto* succ1 = getBlockById(*it, function);
+    uint32_t succ1Id = *it;
     ++it;
-    const auto* succ2 = getBlockById(*it, function);
+    uint32_t succ2Id = *it;
+    
+    const auto* succ1 = getBlockById(succ1Id, function);
+    const auto* succ2 = getBlockById(succ2Id, function);
     
     if (!succ1 || !succ2) {
         return false;
     }
     
-    // Simple heuristic: first successor is then, second is else
-    thenBlock = succ1;
-    elseBlock = succ2;
+    // The branch target is the "then" block, the other is the "else" block
+    if (succ1Id == branchTargetId) {
+        thenBlock = succ1;
+        elseBlock = succ2;
+    } else {
+        thenBlock = succ2;
+        elseBlock = succ1;
+    }
     
     // Try to find merge block (common successor)
     const auto& thenSuccs = thenBlock->getSuccessors();
