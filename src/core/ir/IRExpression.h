@@ -80,6 +80,7 @@ public:
     explicit IRConstant(int64_t value) : value_(value), type_(IRTypes::Long) {}
     explicit IRConstant(double value) : value_(value), type_(IRTypes::Double) {}
     explicit IRConstant(const std::string& value) : value_(value), type_(IRTypes::String) {}
+    explicit IRConstant(const char* value) : value_(std::string(value)), type_(IRTypes::String) {}
     explicit IRConstant(bool value) : value_(value), type_(IRTypes::Boolean) {}
     
     [[nodiscard]] const ValueType& getValue() const { return value_; }

@@ -233,8 +233,8 @@ void testMultipleTypes() {
     calcFunc.addParameter(std::move(paramN));
     
     // Local variables
-    IRVariable& result = calcFunc.createLocalVariable("result", IRTypes::Double);
-    IRVariable& flag = calcFunc.createLocalVariable("flag", IRTypes::Boolean);
+    calcFunc.createLocalVariable("result", IRTypes::Double);
+    calcFunc.createLocalVariable("flag", IRTypes::Boolean);
     
     // Create basic blocks
     IRBasicBlock& entryBB = calcFunc.createBasicBlock();
@@ -249,16 +249,16 @@ void testMultipleTypes() {
         std::move(exprZero),
         IRTypes::Boolean
     );
-    auto assignFlag = IRStatement::makeAssign(flag, std::move(compareExpr));
+    auto assignFlag = IRStatement::makeAssign(calcFunc.getLocalVariables()[1], std::move(compareExpr));
     entryBB.addStatement(std::move(assignFlag));
     
     // Statement: result = x * n (simplified - just assign x for now)
     auto exprX = IRExpression::makeVariable(calcFunc.getParameters()[0]);
-    auto assignResult = IRStatement::makeAssign(result, std::move(exprX));
+    auto assignResult = IRStatement::makeAssign(calcFunc.getLocalVariables()[0], std::move(exprX));
     entryBB.addStatement(std::move(assignResult));
     
     // Statement: Return result
-    auto returnExpr = IRExpression::makeVariable(result);
+    auto returnExpr = IRExpression::makeVariable(calcFunc.getLocalVariables()[0]);
     auto returnStmt = IRStatement::makeReturn(std::move(returnExpr));
     entryBB.addStatement(std::move(returnStmt));
     
