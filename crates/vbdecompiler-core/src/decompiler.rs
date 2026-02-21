@@ -4,7 +4,7 @@
 
 //! Decompiler module - control flow structuring and code generation
 
-use crate::ir::IRFunction;
+use crate::ir::Function;
 
 /// VB6 code generator
 pub struct VBCodeGenerator;
@@ -15,7 +15,7 @@ impl VBCodeGenerator {
     }
 
     /// Generate VB6 code from an IR function
-    pub fn generate(&self, function: &IRFunction) -> String {
+    pub fn generate(&self, function: &Function) -> String {
         // TODO: Implement code generation
         format!(
             "Function {}()\n    ' TODO: Implement\nEnd Function\n",
