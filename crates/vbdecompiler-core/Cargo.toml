@@ -1,0 +1,23 @@
+[package]
+name = "vbdecompiler-core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core decompilation engine for Visual Basic 5/6 executables"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+goblin.workspace = true
+scroll.workspace = true
+
+# Logging
+log = "0.4"
+
+[dev-dependencies]
+pretty_assertions = "1.4"

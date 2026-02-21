@@ -1,0 +1,23 @@
+[package]
+name = "vbdecompiler-ffi"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "C FFI bindings for VBDecompiler (for C++/Qt GUI integration)"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+vbdecompiler-core = { path = "../vbdecompiler-core" }
+libc.workspace = true
+serde_json.workspace = true
+
+# FFI helpers
+safer-ffi = "0.1"
+
+[build-dependencies]
+cbindgen = "0.27"

@@ -1,0 +1,24 @@
+[package]
+name = "vbdecompiler-cli"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Command-line interface for VBDecompiler"
+
+[[bin]]
+name = "vbdecompiler"
+path = "src/main.rs"
+
+[dependencies]
+vbdecompiler-core = { path = "../vbdecompiler-core" }
+anyhow.workspace = true
+clap.workspace = true
+colored.workspace = true
+serde_json.workspace = true
+
+# Additional CLI utilities
+env_logger = "0.11"
+log = "0.4"

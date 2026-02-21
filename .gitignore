@@ -59,3 +59,9 @@ Release/
 RelWithDebInfo/
 MinSizeRel/
 test_pe
+
+# Rust build artifacts
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
