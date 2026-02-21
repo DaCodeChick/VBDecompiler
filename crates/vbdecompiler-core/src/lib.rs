@@ -31,6 +31,7 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+pub mod codegen;
 pub mod decompiler;
 pub mod error;
 pub mod ir;
@@ -39,53 +40,5 @@ pub mod pcode;
 pub mod pe;
 pub mod vb;
 
+pub use decompiler::{DecompilationResult, Decompiler};
 pub use error::{Error, Result};
-
-/// Main decompiler interface
-pub struct Decompiler {
-    // Configuration options can be added here
-}
-
-impl Decompiler {
-    /// Create a new decompiler instance
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    /// Decompile a VB executable file
-    pub fn decompile_file(&mut self, path: &str) -> Result<DecompilationResult> {
-        log::info!("Decompiling file: {}", path);
-
-        // TODO: Implement full pipeline
-        // 1. Parse PE file
-        // 2. Parse VB structures
-        // 3. Extract P-Code
-        // 4. Disassemble P-Code
-        // 5. Lift to IR
-        // 6. Structure control flow
-        // 7. Generate VB6 code
-
-        Err(Error::NotImplemented("decompile_file".to_string()))
-    }
-}
-
-impl Default for Decompiler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Result of decompilation
-#[derive(Debug, Clone)]
-pub struct DecompilationResult {
-    /// Project name
-    pub project_name: String,
-    /// Generated VB6 source code
-    pub vb6_code: String,
-    /// Whether this was P-Code or native
-    pub is_pcode: bool,
-    /// Number of objects decompiled
-    pub object_count: usize,
-    /// Number of methods decompiled
-    pub method_count: usize,
-}
