@@ -36,6 +36,7 @@ pub mod decompiler;
 pub mod error;
 pub mod ir;
 pub mod lifter;
+pub mod packer;
 pub mod pcode;
 pub mod pe;
 pub mod vb;
@@ -43,4 +44,5 @@ pub mod x86;
 
 pub use decompiler::{DecompilationResult, Decompiler};
 pub use error::{Error, Result};
+pub use packer::{detect_packer, PackerDetection, PackerType};
 pub use x86::{X86Disassembler, X86Instruction};

@@ -9,8 +9,10 @@
 //! - Section headers and data
 //! - Import tables
 //! - Resource sections
+//! - Packer detection
 
 use crate::error::{Error, Result};
+use crate::packer::detect_packer;
 use goblin::pe::{section_table::SectionTable, PE};
 use std::path::Path;
 
@@ -45,6 +47,23 @@ impl PEFile {
         // DOS signature check
         if &data[0..2] != b"MZ" {
             return Err(Error::invalid_pe("Invalid DOS signature"));
+        }
+
+        // Check for packers early
+        if let Ok(Some(detection)) = detect_packer(&data) {
+            log::warn!(
+                "Packed executable detected: {} (confidence: {:.0}%)",
+                detection.packer.name(),
+                detection.confidence * 100.0
+            );
+            log::warn!("Unpacking instructions:");
+            log::warn!("{}", detection.packer.unpack_instructions());
+
+            return Err(Error::invalid_pe(format!(
+                "Packed executable detected ({}). Please unpack before decompilation.\n{}",
+                detection.packer.name(),
+                detection.packer.unpack_instructions()
+            )));
         }
 
         // Parse PE using goblin

@@ -6,6 +6,7 @@ A Ghidra-style decompiler for Visual Basic 5/6 executables, built with a **Rust 
 
 - **Multi-format Support**: Analyze .exe, .dll, and .ocx VB binaries
 - **Dual Disassembly**: View both P-Code (VB intermediate language) and x86 native code
+- **Packer Detection**: Automatic detection of UPX, ASPack, PECompact, and other common packers
 - **Ghidra-style UI**: Familiar workspace with symbol browser, type browser, and function call trees
 - **Smart Symbol Naming**: Automatic `FUN_` and `DAT_` naming conventions
 - **VB6 Decompilation**: Reconstruct original Visual Basic 6 source code
@@ -26,6 +27,8 @@ A Ghidra-style decompiler for Visual Basic 5/6 executables, built with a **Rust 
 - **GUI Framework**: C++23 + Qt 6 (Widgets, Core, Gui)
 - **FFI Layer**: C bindings bridging Rust core to C++ GUI
 - **Build System**: CMake 3.20+ (C++/Qt) + Cargo (Rust)
+- **Disassembly**: iced-x86 for professional x86/x64 disassembly
+- **Packer Detection**: Entropy analysis and signature-based detection (goblin + entropy crate)
 - **Concurrency**: Rayon for data-parallel method decompilation
 - **Target Platforms**: Windows, Linux, macOS
 
@@ -37,7 +40,6 @@ VBDecompiler uses a unique hybrid architecture combining Rust's safety with Qt's
 ┌─────────────────────────────────────────┐
 │         Qt6 GUI (C++)                   │
 │    - MainWindow and UI components       │
-│    - X86 disassembler (native view)     │
 └──────────────────┬──────────────────────┘
                    │ C FFI
                    ↓
@@ -50,8 +52,10 @@ VBDecompiler uses a unique hybrid architecture combining Rust's safety with Qt's
 │  ┌───────────────────────────────────┐  │
 │  │  vbdecompiler-core                │  │
 │  │  - PE parsing (goblin)            │  │
+│  │  - Packer detection (entropy)     │  │
 │  │  - VB5/6 structure parsing        │  │
 │  │  - P-Code disassembler            │  │
+│  │  - x86 disassembler (iced-x86)    │  │
 │  │  - IR system                      │  │
 │  │  - P-Code to IR lifter            │  │
 │  │  - VB6 code generator             │  │
@@ -76,7 +80,6 @@ VBDecompiler/
 │   └── vbdecompiler-ffi/       # C FFI bindings
 ├── src/
 │   ├── main.cpp                # Application entry point
-│   ├── core/disasm/x86/        # X86 disassembler (C++)
 │   └── ui/                     # Qt UI components
 │       └── MainWindow.{h,cpp,ui}
 ├── include/
@@ -325,7 +328,33 @@ Note: These are not included in the repository due to size. You can create test 
 The decompiler automatically detects:
 - VB5/VB6 signature (`VB5!` header)
 - P-Code vs native compilation
-- UPX compression (requires external `upx` tool)
+- Packed/compressed executables:
+  - **UPX** (Ultimate Packer for eXecutables)
+  - **ASPack** (commercial packer)
+  - **PECompact** (commercial packer)
+  - **Themida/WinLicense** (advanced protection)
+  - **FSG, Petite, MEW, NSPack** (other common packers)
+  - **Unknown packers** via entropy analysis
+
+### Packed Executables
+
+If the decompiler detects a packed executable, it will display an error message with unpacking instructions. For UPX-packed files:
+
+```bash
+# Install UPX from https://upx.github.io/
+# Unpack the executable
+upx -d packed.exe -o unpacked.exe
+
+# Then decompile the unpacked version
+./vbdecompiler unpacked.exe
+```
+
+The packer detection system uses:
+- **Section name analysis**: Identifies packer signatures (e.g., "UPX0", ".aspack")
+- **Entropy analysis**: Detects compressed/encrypted sections (Shannon entropy > 7.2)
+- **Import table analysis**: Flags suspiciously minimal imports
+
+For other packers, consult the specific unpacker tool or use universal unpackers.
 
 ## Documentation
 
