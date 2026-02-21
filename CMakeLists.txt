@@ -129,3 +129,19 @@ target_compile_features(test_x86 PRIVATE cxx_std_23)
 
 # Installation
 install(TARGETS vbdecompiler DESTINATION bin)
+
+# Install CLI binary (built with Cargo)
+install(
+    PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/target/release/vbdecompiler
+    DESTINATION bin
+    RENAME vbdecompiler-cli
+)
+
+# Install shell completions (optional - user can generate with: vbdecompiler completions <shell>)
+install(
+    CODE "execute_process(
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/target/release/vbdecompiler completions bash
+        OUTPUT_FILE ${CMAKE_INSTALL_PREFIX}/share/bash-completion/completions/vbdecompiler
+        ERROR_QUIET
+    )"
+)

@@ -179,7 +179,7 @@ impl Default for Decompiler {
 }
 
 /// Result of decompilation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct DecompilationResult {
     /// Project name
     pub project_name: String,

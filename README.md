@@ -202,18 +202,147 @@ Use the **View** menu or toolbar button to toggle between P-Code (VB intermediat
 
 ### Command-Line Tool
 
-For batch processing or scripting, use the Rust CLI:
+The CLI provides full headless operation for batch processing, CI/CD integration, and scripting.
 
+#### Installation
+
+**Option 1: System-wide install via Cargo**
 ```bash
-# Decompile a VB executable
-cargo run --bin vbdecompiler-cli -- decompile input.exe
+cargo install --path crates/vbdecompiler-cli
+```
+
+**Option 2: Build and use locally**
+```bash
+cargo build --release --package vbdecompiler-cli
+./target/release/vbdecompiler --help
+```
+
+**Option 3: CMake install (includes both GUI and CLI)**
+```bash
+mkdir build && cd build
+cmake .. && make
+sudo make install  # Installs vbdecompiler-cli to /usr/local/bin
+```
+
+#### Available Commands
+
+**Decompile** - Full decompilation to VB6 source code
+```bash
+# Decompile to stdout
+vbdecompiler decompile input.exe
 
 # Output to file
-cargo run --bin vbdecompiler-cli -- decompile input.exe --output output.vb
+vbdecompiler decompile input.exe --output output.vb
 
-# With detailed logging
-RUST_LOG=debug cargo run --bin vbdecompiler-cli -- decompile input.exe
+# Output to directory (auto-generates filename from input)
+vbdecompiler decompile input.exe --output ./output/
+
+# JSON format (for programmatic integration)
+vbdecompiler decompile input.exe --format json --output result.json
+
+# IR format (intermediate representation)
+vbdecompiler decompile input.exe --format ir --output output.ir
 ```
+
+**Info** - Analyze PE structure and detect packers without decompiling
+```bash
+# Human-readable output
+vbdecompiler info input.exe
+
+# Detailed analysis (includes sections, imports, etc.)
+vbdecompiler info input.exe --detailed
+
+# JSON output (for parsing in scripts)
+vbdecompiler info input.exe --format json
+```
+
+**Check-Packer** - Detect if executable is packed
+```bash
+# Verbose output with confidence and unpack instructions
+vbdecompiler check-packer packed.exe
+
+# Quiet mode (just prints packer name, for scripting)
+vbdecompiler -q check-packer packed.exe
+
+# Exit codes: 0 = unpacked, 1 = packed (useful in shell scripts)
+if vbdecompiler check-packer input.exe >/dev/null 2>&1; then
+    echo "File is not packed"
+else
+    echo "File is packed, unpack before decompiling"
+fi
+```
+
+**Disasm** - P-Code disassembly only (no decompilation)
+```bash
+# Output to stdout
+vbdecompiler disasm input.exe
+
+# Show hex bytes
+vbdecompiler disasm input.exe --hex
+
+# Save to file
+vbdecompiler disasm input.exe --output disasm.txt
+```
+
+**Completions** - Generate shell completions
+```bash
+# Bash
+vbdecompiler completions bash > ~/.local/share/bash-completion/completions/vbdecompiler
+
+# Zsh
+vbdecompiler completions zsh > ~/.zsh/completions/_vbdecompiler
+
+# Fish
+vbdecompiler completions fish > ~/.config/fish/completions/vbdecompiler.fish
+
+# PowerShell (Windows)
+vbdecompiler completions powershell > vbdecompiler.ps1
+```
+
+#### Global Options
+
+- `-v, --verbose` - Enable verbose logging (shows debug information)
+- `-q, --quiet` - Quiet mode (errors only, useful for scripting)
+- `-h, --help` - Print help information
+- `-V, --version` - Print version information
+
+#### Batch Processing Example
+
+Process multiple VB executables in a directory:
+```bash
+#!/bin/bash
+for exe in *.exe; do
+    echo "Processing $exe..."
+    
+    # Check if packed
+    if vbdecompiler -q check-packer "$exe" 2>/dev/null; then
+        echo "  Skipping (packed): $exe"
+        continue
+    fi
+    
+    # Decompile
+    vbdecompiler decompile "$exe" --output "decompiled/${exe%.exe}.vb" \
+        && echo "  Success: $exe" \
+        || echo "  Failed: $exe"
+done
+```
+
+#### Supported Packer Detection
+
+The CLI automatically detects these packers with high confidence:
+- **UPX** (Ultimate Packer for eXecutables)
+- **ASPack** (Advanced Software Packer)
+- **PECompact** (PE file compressor)
+- **Themida** (Advanced protection system)
+- **FSG** (Fast Small Good packer)
+- **Petite** (Small PE compressor)
+- **MEW** (Magic Executable Wrapper)
+- **NSPack** (NorthStar PE Packer)
+
+Detection methods:
+1. **Section signatures** (95% confidence) - Detects characteristic section names
+2. **Entropy analysis** (70% confidence) - Identifies compressed/encrypted data
+3. **Import table** (50% confidence) - Checks for minimal imports typical of packers
 
 ### Programmatic API (Rust)
 
