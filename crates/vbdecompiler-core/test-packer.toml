@@ -1,0 +1,3 @@
+[[bin]]
+name = "test-packer"
+path = "tests/test_packer_detection.rs"

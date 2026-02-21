@@ -24,3 +24,7 @@ log = "0.4"
 
 [dev-dependencies]
 pretty_assertions = "1.4"
+
+[[example]]
+name = "detect-packer"
+path = "examples/detect_packer.rs"

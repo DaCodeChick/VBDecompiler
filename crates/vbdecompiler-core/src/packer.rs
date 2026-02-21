@@ -142,9 +142,24 @@ const HIGH_ENTROPY_THRESHOLD: f64 = 7.2;
 
 /// Detect if a PE executable is packed
 pub fn detect_packer(pe_data: &[u8]) -> Result<Option<PackerDetection>, PackerError> {
-    let pe = PE::parse(pe_data).map_err(|e| PackerError::ParseError(e.to_string()))?;
+    // Try lightweight section name detection first (doesn't parse full PE)
+    // This works even on packed files where resources are corrupted
+    if let Some(detection) = detect_by_section_names_raw(pe_data) {
+        return Ok(Some(detection));
+    }
 
-    // Try section name detection first (highest confidence)
+    // Now try full PE parse for more sophisticated detection
+    // Use parse_unchecked to skip resource validation
+    let pe = match PE::parse(pe_data) {
+        Ok(pe) => pe,
+        Err(_) => {
+            // If full parse fails (e.g., corrupted resources in packed file),
+            // fall back to basic entropy analysis on the whole file
+            return Ok(detect_by_raw_entropy(pe_data));
+        }
+    };
+
+    // Try section name detection with full PE
     if let Some(detection) = detect_by_section_names(&pe) {
         return Ok(Some(detection));
     }
@@ -239,6 +254,143 @@ fn detect_by_section_names(pe: &PE) -> Option<PackerDetection> {
                 method: DetectionMethod::SectionName,
             });
         }
+    }
+
+    None
+}
+
+/// Detect packer by section names using raw PE parsing
+/// This is more robust than full PE parsing for packed files
+fn detect_by_section_names_raw(pe_data: &[u8]) -> Option<PackerDetection> {
+    // Minimal PE header parsing to read sections
+    // PE signature offset is at 0x3C
+    if pe_data.len() < 0x40 {
+        return None;
+    }
+
+    let pe_offset =
+        u32::from_le_bytes([pe_data[0x3C], pe_data[0x3D], pe_data[0x3E], pe_data[0x3F]]) as usize;
+
+    // Check we have room for PE signature + COFF header
+    if pe_offset + 24 > pe_data.len() {
+        return None;
+    }
+
+    // Verify PE signature "PE\0\0"
+    if &pe_data[pe_offset..pe_offset + 4] != b"PE\0\0" {
+        return None;
+    }
+
+    // Number of sections is at offset 6 in COFF header
+    let num_sections = u16::from_le_bytes([pe_data[pe_offset + 6], pe_data[pe_offset + 7]]);
+
+    // Size of optional header
+    let opt_header_size =
+        u16::from_le_bytes([pe_data[pe_offset + 20], pe_data[pe_offset + 21]]) as usize;
+
+    // Section table starts after PE signature (4) + COFF header (20) + optional header
+    let section_table_offset = pe_offset + 24 + opt_header_size;
+
+    // Each section entry is 40 bytes, first 8 bytes are the name
+    for i in 0..num_sections {
+        let section_offset = section_table_offset + (i as usize * 40);
+
+        if section_offset + 8 > pe_data.len() {
+            break;
+        }
+
+        let section_name = &pe_data[section_offset..section_offset + 8];
+        let name = String::from_utf8_lossy(section_name);
+        let name_trimmed = name.trim_end_matches('\0');
+
+        // UPX signatures
+        if name_trimmed.starts_with("UPX") {
+            return Some(PackerDetection {
+                packer: PackerType::UPX,
+                confidence: 0.95,
+                method: DetectionMethod::SectionName,
+            });
+        }
+
+        // ASPack signatures
+        if name_trimmed.starts_with(".aspack") || name_trimmed.starts_with(".adata") {
+            return Some(PackerDetection {
+                packer: PackerType::ASPack,
+                confidence: 0.90,
+                method: DetectionMethod::SectionName,
+            });
+        }
+
+        // PECompact signatures
+        if name_trimmed.starts_with("PEC2") || name_trimmed.starts_with("PECompact") {
+            return Some(PackerDetection {
+                packer: PackerType::PECompact,
+                confidence: 0.90,
+                method: DetectionMethod::SectionName,
+            });
+        }
+
+        // Themida/WinLicense signatures
+        if name_trimmed.starts_with(".themida") || name_trimmed.starts_with(".winlice") {
+            return Some(PackerDetection {
+                packer: PackerType::Themida,
+                confidence: 0.95,
+                method: DetectionMethod::SectionName,
+            });
+        }
+
+        // FSG signatures
+        if name_trimmed.eq_ignore_ascii_case("FSG!") {
+            return Some(PackerDetection {
+                packer: PackerType::FSG,
+                confidence: 0.90,
+                method: DetectionMethod::SectionName,
+            });
+        }
+
+        // Petite signatures
+        if name_trimmed.starts_with(".petite") {
+            return Some(PackerDetection {
+                packer: PackerType::Petite,
+                confidence: 0.90,
+                method: DetectionMethod::SectionName,
+            });
+        }
+
+        // MEW signatures
+        if name_trimmed.eq_ignore_ascii_case("MEW") {
+            return Some(PackerDetection {
+                packer: PackerType::MEW,
+                confidence: 0.85,
+                method: DetectionMethod::SectionName,
+            });
+        }
+
+        // NSPack signatures
+        if name_trimmed.starts_with(".nsp") {
+            return Some(PackerDetection {
+                packer: PackerType::NSPack,
+                confidence: 0.85,
+                method: DetectionMethod::SectionName,
+            });
+        }
+    }
+
+    None
+}
+
+/// Detect packer by whole-file entropy (fallback when PE parse fails)
+fn detect_by_raw_entropy(pe_data: &[u8]) -> Option<PackerDetection> {
+    // Sample first 64KB for performance
+    let sample_size = std::cmp::min(65536, pe_data.len());
+    let entropy = calculate_shannon_entropy(&pe_data[..sample_size]);
+
+    if entropy > HIGH_ENTROPY_THRESHOLD {
+        return Some(PackerDetection {
+            packer: PackerType::Unknown,
+            confidence: 0.60,
+            method: DetectionMethod::Entropy,
+        });
     }
 
     None
