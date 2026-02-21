@@ -120,7 +120,7 @@ cmake --build .
 ./bin/vbdecompiler
 
 # Or use the CLI tool directly
-cargo run --bin vbdecompiler-cli -- decompile <file.exe>
+cargo run --package vbdecompiler-cli -- decompile <file.exe>
 ```
 
 ### Linux/macOS
@@ -214,14 +214,14 @@ cargo install --path crates/vbdecompiler-cli
 **Option 2: Build and use locally**
 ```bash
 cargo build --release --package vbdecompiler-cli
-./target/release/vbdecompiler --help
+./target/release/vbdc --help
 ```
 
 **Option 3: CMake install (includes both GUI and CLI)**
 ```bash
 mkdir build && cd build
 cmake .. && make
-sudo make install  # Installs vbdecompiler-cli to /usr/local/bin
+sudo make install  # Installs vbdc to /usr/local/bin
 ```
 
 #### Available Commands
@@ -229,43 +229,43 @@ sudo make install  # Installs vbdecompiler-cli to /usr/local/bin
 **Decompile** - Full decompilation to VB6 source code
 ```bash
 # Decompile to stdout
-vbdecompiler decompile input.exe
+vbdc decompile input.exe
 
 # Output to file
-vbdecompiler decompile input.exe --output output.vb
+vbdc decompile input.exe --output output.vb
 
 # Output to directory (auto-generates filename from input)
-vbdecompiler decompile input.exe --output ./output/
+vbdc decompile input.exe --output ./output/
 
 # JSON format (for programmatic integration)
-vbdecompiler decompile input.exe --format json --output result.json
+vbdc decompile input.exe --format json --output result.json
 
 # IR format (intermediate representation)
-vbdecompiler decompile input.exe --format ir --output output.ir
+vbdc decompile input.exe --format ir --output output.ir
 ```
 
 **Info** - Analyze PE structure and detect packers without decompiling
 ```bash
 # Human-readable output
-vbdecompiler info input.exe
+vbdc info input.exe
 
 # Detailed analysis (includes sections, imports, etc.)
-vbdecompiler info input.exe --detailed
+vbdc info input.exe --detailed
 
 # JSON output (for parsing in scripts)
-vbdecompiler info input.exe --format json
+vbdc info input.exe --format json
 ```
 
 **Check-Packer** - Detect if executable is packed
 ```bash
 # Verbose output with confidence and unpack instructions
-vbdecompiler check-packer packed.exe
+vbdc check-packer packed.exe
 
 # Quiet mode (just prints packer name, for scripting)
-vbdecompiler -q check-packer packed.exe
+vbdc -q check-packer packed.exe
 
 # Exit codes: 0 = unpacked, 1 = packed (useful in shell scripts)
-if vbdecompiler check-packer input.exe >/dev/null 2>&1; then
+if vbdc check-packer input.exe >/dev/null 2>&1; then
     echo "File is not packed"
 else
     echo "File is packed, unpack before decompiling"
@@ -275,28 +275,28 @@ fi
 **Disasm** - P-Code disassembly only (no decompilation)
 ```bash
 # Output to stdout
-vbdecompiler disasm input.exe
+vbdc disasm input.exe
 
 # Show hex bytes
-vbdecompiler disasm input.exe --hex
+vbdc disasm input.exe --hex
 
 # Save to file
-vbdecompiler disasm input.exe --output disasm.txt
+vbdc disasm input.exe --output disasm.txt
 ```
 
 **Completions** - Generate shell completions
 ```bash
 # Bash
-vbdecompiler completions bash > ~/.local/share/bash-completion/completions/vbdecompiler
+vbdc completions bash > ~/.local/share/bash-completion/completions/vbdc
 
 # Zsh
-vbdecompiler completions zsh > ~/.zsh/completions/_vbdecompiler
+vbdc completions zsh > ~/.zsh/completions/_vbdc
 
 # Fish
-vbdecompiler completions fish > ~/.config/fish/completions/vbdecompiler.fish
+vbdc completions fish > ~/.config/fish/completions/vbdc.fish
 
 # PowerShell (Windows)
-vbdecompiler completions powershell > vbdecompiler.ps1
+vbdc completions powershell > vbdc.ps1
 ```
 
 #### Global Options
@@ -315,13 +315,13 @@ for exe in *.exe; do
     echo "Processing $exe..."
     
     # Check if packed
-    if vbdecompiler -q check-packer "$exe" 2>/dev/null; then
+    if vbdc -q check-packer "$exe" 2>/dev/null; then
         echo "  Skipping (packed): $exe"
         continue
     fi
     
     # Decompile
-    vbdecompiler decompile "$exe" --output "decompiled/${exe%.exe}.vb" \
+    vbdc decompile "$exe" --output "decompiled/${exe%.exe}.vb" \
         && echo "  Success: $exe" \
         || echo "  Failed: $exe"
 done
@@ -474,7 +474,9 @@ If the decompiler detects a packed executable, it will display an error message 
 # Unpack the executable
 upx -d packed.exe -o unpacked.exe
 
-# Then decompile the unpacked version
+# Then decompile with CLI or GUI
+vbdc decompile unpacked.exe
+# or
 ./vbdecompiler unpacked.exe
 ```
 

@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use vbdecompiler_core::{detect_packer, Decompiler, Error};
 
 #[derive(Parser)]
-#[command(name = "vbdecompiler")]
+#[command(name = "vbdc")]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
@@ -442,5 +442,5 @@ fn cmd_check_packer(input: PathBuf, quiet: bool) -> Result<(), Error> {
 
 fn cmd_completions(shell: Shell) {
     let mut cmd = Cli::command();
-    generate(shell, &mut cmd, "vbdecompiler", &mut io::stdout());
+    generate(shell, &mut cmd, "vbdc", &mut io::stdout());
 }

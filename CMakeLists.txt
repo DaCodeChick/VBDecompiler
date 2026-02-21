@@ -132,16 +132,15 @@ install(TARGETS vbdecompiler DESTINATION bin)
 
 # Install CLI binary (built with Cargo)
 install(
-    PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/target/release/vbdecompiler
+    PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/target/release/vbdc
     DESTINATION bin
-    RENAME vbdecompiler-cli
 )
 
-# Install shell completions (optional - user can generate with: vbdecompiler completions <shell>)
+# Install shell completions (optional - user can generate with: vbdc completions <shell>)
 install(
     CODE "execute_process(
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/target/release/vbdecompiler completions bash
-        OUTPUT_FILE ${CMAKE_INSTALL_PREFIX}/share/bash-completion/completions/vbdecompiler
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/target/release/vbdc completions bash
+        OUTPUT_FILE ${CMAKE_INSTALL_PREFIX}/share/bash-completion/completions/vbdc
         ERROR_QUIET
     )"
 )
