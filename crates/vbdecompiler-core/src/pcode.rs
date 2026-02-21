@@ -43,20 +43,6 @@ pub enum PCodeType {
 }
 
 impl PCodeType {
-    /// Parse type character to enum
-    fn from_char(c: u8) -> Self {
-        match c {
-            b'b' => Self::Byte,
-            b'?' => Self::Boolean,
-            b'%' => Self::Integer,
-            b'&' => Self::Long,
-            b'!' => Self::Single,
-            b'~' => Self::Variant,
-            b'z' => Self::String,
-            _ => Self::Unknown,
-        }
-    }
-
     /// Convert type to string representation
     pub fn to_string(&self) -> &'static str {
         match self {

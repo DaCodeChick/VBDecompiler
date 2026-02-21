@@ -10,7 +10,7 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::ptr;
-use vbdecompiler_core::{DecompilationResult, Decompiler};
+use vbdecompiler_core::Decompiler;
 
 /// Opaque handle to a Decompiler instance
 #[repr(C)]
