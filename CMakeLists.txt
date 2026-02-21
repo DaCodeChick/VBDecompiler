@@ -38,18 +38,7 @@ add_custom_target(rust_build ALL
     BYPRODUCTS ${RUST_FFI_LIB}
 )
 
-# C++ source files (x86 disassembler only - core decompilation is in Rust)
-set(CORE_SOURCES
-    src/core/disasm/x86/X86Instruction.cpp
-    src/core/disasm/x86/X86Disassembler.cpp
-    src/core/disasm/x86/X86DecoderHelpers.cpp
-    src/core/disasm/x86/X86DecoderHelpers2.cpp
-    src/core/disasm/x86/X86DecoderData.cpp
-    src/core/disasm/x86/X86DecoderControl.cpp
-    src/core/disasm/x86/X86DecoderArithmetic.cpp
-    src/core/disasm/x86/X86DecoderLogical.cpp
-)
-
+# C++ source files (GUI only - decompilation and x86 disassembly in Rust)
 set(UI_SOURCES
     src/ui/MainWindow.cpp
     src/ui/MainWindow.ui
@@ -58,7 +47,6 @@ set(UI_SOURCES
 # Main executable
 add_executable(vbdecompiler
     src/main.cpp
-    ${CORE_SOURCES}
     ${UI_SOURCES}
 )
 
@@ -114,19 +102,30 @@ endif()
 # Enable C++23 features
 target_compile_features(vbdecompiler PRIVATE cxx_std_23)
 
-# X86 disassembler test
+# X86 disassembler test (uses Rust iced-x86 via FFI)
 add_executable(test_x86
-    tests/test_x86.cpp
-    ${CORE_SOURCES}
+    tests/test_x86_rust.cpp
 )
+
+add_dependencies(test_x86 rust_build)
 
 target_link_libraries(test_x86 PRIVATE
-    Qt6::Core
+    ${RUST_FFI_LIB}
 )
 
+if(UNIX AND NOT APPLE)
+    target_link_libraries(test_x86 PRIVATE pthread dl m)
+elseif(APPLE)
+    target_link_libraries(test_x86 PRIVATE "-framework Security" "-framework CoreFoundation")
+elseif(WIN32)
+    target_link_libraries(test_x86 PRIVATE ws2_32 userenv bcrypt ntdll)
+endif()
+
 target_include_directories(test_x86 PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+target_compile_features(test_x86 PRIVATE cxx_std_23)
 
 # Installation
 install(TARGETS vbdecompiler DESTINATION bin)

@@ -10,7 +10,7 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::ptr;
-use vbdecompiler_core::Decompiler;
+use vbdecompiler_core::{Decompiler, X86Disassembler};
 
 /// Opaque handle to a Decompiler instance
 #[repr(C)]
@@ -127,4 +127,124 @@ pub extern "C" fn vbdecompiler_free_string(s: *mut c_char) {
 pub extern "C" fn vbdecompiler_last_error() -> *const c_char {
     // TODO: Implement thread-local error storage
     ptr::null()
+}
+
+// ============================================================================
+// X86 Disassembler FFI
+// ============================================================================
+
+/// Opaque handle to an X86Disassembler instance
+#[repr(C)]
+pub struct X86DisassemblerHandle {
+    _private: [u8; 0],
+}
+
+/// X86 instruction result
+#[repr(C)]
+pub struct X86InstructionResult {
+    /// Address of instruction
+    pub address: u64,
+    /// Instruction text (must be freed with vbdecompiler_free_string)
+    pub text: *mut c_char,
+    /// Instruction length in bytes
+    pub length: usize,
+    /// Instruction bytes (up to 15 bytes for x86)
+    pub bytes: [u8; 15],
+    /// Actual number of bytes in the instruction
+    pub bytes_count: usize,
+}
+
+/// Create a new x86 disassembler (32-bit mode)
+#[no_mangle]
+pub extern "C" fn x86_disassembler_new() -> *mut X86DisassemblerHandle {
+    let disasm = Box::new(X86Disassembler::new_32bit());
+    Box::into_raw(disasm) as *mut X86DisassemblerHandle
+}
+
+/// Create a new x86 disassembler with specific bitness
+#[no_mangle]
+pub extern "C" fn x86_disassembler_new_with_bitness(bitness: u32) -> *mut X86DisassemblerHandle {
+    let disasm = Box::new(X86Disassembler::new(bitness));
+    Box::into_raw(disasm) as *mut X86DisassemblerHandle
+}
+
+/// Free an x86 disassembler instance
+#[no_mangle]
+pub extern "C" fn x86_disassembler_free(handle: *mut X86DisassemblerHandle) {
+    if !handle.is_null() {
+        unsafe {
+            let _ = Box::from_raw(handle as *mut X86Disassembler);
+        }
+    }
+}
+
+/// Disassemble bytes
+///
+/// Returns number of instructions disassembled, or -1 on error
+/// results array must be freed with x86_disassembler_free_results
+#[no_mangle]
+pub extern "C" fn x86_disassemble(
+    handle: *mut X86DisassemblerHandle,
+    code: *const u8,
+    code_len: usize,
+    address: u64,
+    results: *mut *mut X86InstructionResult,
+    count: *mut usize,
+) -> c_int {
+    if handle.is_null() || code.is_null() || results.is_null() || count.is_null() {
+        return -1;
+    }
+
+    let disasm = unsafe { &*(handle as *const X86Disassembler) };
+    let code_slice = unsafe { std::slice::from_raw_parts(code, code_len) };
+
+    match disasm.disassemble(code_slice, address) {
+        Ok(instructions) => {
+            let mut c_results = Vec::with_capacity(instructions.len());
+
+            for instr in instructions {
+                let mut bytes = [0u8; 15];
+                let bytes_count = instr.bytes.len().min(15);
+                bytes[..bytes_count].copy_from_slice(&instr.bytes[..bytes_count]);
+
+                let text = match CString::new(instr.text) {
+                    Ok(s) => s.into_raw(),
+                    Err(_) => ptr::null_mut(),
+                };
+
+                c_results.push(X86InstructionResult {
+                    address: instr.address,
+                    text,
+                    length: instr.length,
+                    bytes,
+                    bytes_count,
+                });
+            }
+
+            let len = c_results.len();
+            unsafe {
+                *count = len;
+                *results = c_results.as_mut_ptr();
+            }
+            std::mem::forget(c_results);
+
+            len as c_int
+        }
+        Err(_) => -1,
+    }
+}
+
+/// Free disassembly results
+#[no_mangle]
+pub extern "C" fn x86_disassembler_free_results(results: *mut X86InstructionResult, count: usize) {
+    if !results.is_null() && count > 0 {
+        unsafe {
+            let results_vec = Vec::from_raw_parts(results, count, count);
+            for result in results_vec {
+                if !result.text.is_null() {
+                    let _ = CString::from_raw(result.text);
+                }
+            }
+        }
+    }
 }

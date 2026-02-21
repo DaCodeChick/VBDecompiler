@@ -87,6 +87,76 @@ void vbdecompiler_free_string(char* s);
  */
 const char* vbdecompiler_last_error(void);
 
+// ============================================================================
+// X86 Disassembler FFI
+// ============================================================================
+
+/**
+ * Opaque handle to an X86Disassembler instance
+ */
+typedef struct X86DisassemblerHandle X86DisassemblerHandle;
+
+/**
+ * X86 instruction result
+ */
+typedef struct {
+    uint64_t address;       // Address of instruction
+    char* text;             // Assembly text (must be freed with vbdecompiler_free_string)
+    size_t length;          // Instruction length in bytes
+    uint8_t bytes[15];      // Instruction bytes (up to 15 for x86)
+    size_t bytes_count;     // Actual number of bytes
+} X86InstructionResult;
+
+/**
+ * Create a new x86 disassembler (32-bit mode)
+ * 
+ * @return Opaque handle to disassembler, must be freed with x86_disassembler_free
+ */
+X86DisassemblerHandle* x86_disassembler_new(void);
+
+/**
+ * Create a new x86 disassembler with specific bitness
+ * 
+ * @param bitness 16, 32, or 64 bit mode
+ * @return Opaque handle to disassembler, must be freed with x86_disassembler_free
+ */
+X86DisassemblerHandle* x86_disassembler_new_with_bitness(uint32_t bitness);
+
+/**
+ * Free an x86 disassembler instance
+ * 
+ * @param handle Disassembler handle to free
+ */
+void x86_disassembler_free(X86DisassemblerHandle* handle);
+
+/**
+ * Disassemble x86 code
+ * 
+ * @param handle Disassembler handle
+ * @param code Byte array to disassemble
+ * @param code_len Length of code array
+ * @param address Starting address (RVA or virtual address)
+ * @param results Output pointer for instruction array (must be freed with x86_disassembler_free_results)
+ * @param count Output pointer for number of instructions
+ * @return Number of instructions on success, -1 on error
+ */
+int x86_disassemble(
+    X86DisassemblerHandle* handle,
+    const uint8_t* code,
+    size_t code_len,
+    uint64_t address,
+    X86InstructionResult** results,
+    size_t* count
+);
+
+/**
+ * Free disassembly results
+ * 
+ * @param results Results array to free
+ * @param count Number of results
+ */
+void x86_disassembler_free_results(X86InstructionResult* results, size_t count);
+
 #ifdef __cplusplus
 }
 #endif

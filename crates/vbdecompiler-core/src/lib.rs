@@ -39,6 +39,8 @@ pub mod lifter;
 pub mod pcode;
 pub mod pe;
 pub mod vb;
+pub mod x86;
 
 pub use decompiler::{DecompilationResult, Decompiler};
 pub use error::{Error, Result};
+pub use x86::{X86Disassembler, X86Instruction};

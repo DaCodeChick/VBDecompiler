@@ -28,6 +28,9 @@ rayon = "1.10"
 goblin = "0.9"
 scroll = "0.12"
 
+# Disassembly
+iced-x86 = "1.21"
+
 # CLI dependencies
 clap = { version = "4.5", features = ["derive", "cargo"] }
 colored = "3.0"
