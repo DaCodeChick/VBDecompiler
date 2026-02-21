@@ -1,6 +1,6 @@
 # VBDecompiler
 
-A Ghidra-style decompiler for Visual Basic 5/6 executables, built with C++23 and Qt 6.
+A Ghidra-style decompiler for Visual Basic 5/6 executables, built with a **Rust decompilation engine** and **Qt 6 GUI**.
 
 ## Features
 
@@ -9,6 +9,8 @@ A Ghidra-style decompiler for Visual Basic 5/6 executables, built with C++23 and
 - **Ghidra-style UI**: Familiar workspace with symbol browser, type browser, and function call trees
 - **Smart Symbol Naming**: Automatic `FUN_` and `DAT_` naming conventions
 - **VB6 Decompilation**: Reconstruct original Visual Basic 6 source code
+- **Memory-Safe Core**: Rust implementation for reliable, crash-free decompilation
+- **Parallel Decompilation**: Multi-threaded processing with Rayon scales to all CPU cores
 - **Comprehensive Analysis**:
   - Disassembly listing with bytes, stack depth, mnemonic, and IL instruction columns
   - Defined strings browser
@@ -20,34 +22,66 @@ A Ghidra-style decompiler for Visual Basic 5/6 executables, built with C++23 and
 
 ### Technology Stack
 
-- **Language**: C++23
-- **UI Framework**: Qt 6 (Widgets, Core, Gui)
-- **UI Design**: `.ui` files compiled with Qt's `uic` meta-compiler
-- **Build System**: CMake 3.20+
+- **Core Engine**: Rust 2021 (memory-safe decompilation logic with parallel processing)
+- **GUI Framework**: C++23 + Qt 6 (Widgets, Core, Gui)
+- **FFI Layer**: C bindings bridging Rust core to C++ GUI
+- **Build System**: CMake 3.20+ (C++/Qt) + Cargo (Rust)
+- **Concurrency**: Rayon for data-parallel method decompilation
 - **Target Platforms**: Windows, Linux, macOS
+
+### Hybrid Architecture
+
+VBDecompiler uses a unique hybrid architecture combining Rust's safety with Qt's mature GUI:
+
+```
+┌─────────────────────────────────────────┐
+│         Qt6 GUI (C++)                   │
+│    - MainWindow and UI components       │
+│    - X86 disassembler (native view)     │
+└──────────────────┬──────────────────────┘
+                   │ C FFI
+                   ↓
+┌─────────────────────────────────────────┐
+│      Rust Decompilation Core            │
+│  ┌───────────────────────────────────┐  │
+│  │  vbdecompiler-ffi (C bindings)    │  │
+│  └──────────────┬────────────────────┘  │
+│                 ↓                        │
+│  ┌───────────────────────────────────┐  │
+│  │  vbdecompiler-core                │  │
+│  │  - PE parsing (goblin)            │  │
+│  │  - VB5/6 structure parsing        │  │
+│  │  - P-Code disassembler            │  │
+│  │  - IR system                      │  │
+│  │  - P-Code to IR lifter            │  │
+│  │  - VB6 code generator             │  │
+│  └───────────────────────────────────┘  │
+│                                          │
+│  ┌───────────────────────────────────┐  │
+│  │  vbdecompiler-cli (optional)      │  │
+│  │  - Standalone command-line tool   │  │
+│  └───────────────────────────────────┘  │
+└─────────────────────────────────────────┘
+```
 
 ### Project Structure
 
 ```
 VBDecompiler/
-├── CMakeLists.txt              # Build configuration
+├── CMakeLists.txt              # C++ build configuration
+├── Cargo.toml                  # Rust workspace configuration
+├── crates/                     # Rust crates
+│   ├── vbdecompiler-core/      # Core decompilation engine
+│   ├── vbdecompiler-cli/       # Command-line tool
+│   └── vbdecompiler-ffi/       # C FFI bindings
 ├── src/
 │   ├── main.cpp                # Application entry point
-│   ├── core/                   # Core decompiler engine
-│   │   ├── pe/                 # PE file format parser
-│   │   ├── vb/                 # VB5/6 binary format parser
-│   │   ├── disasm/             # P-Code and x86 disassemblers
-│   │   ├── ir/                 # Intermediate representation
-│   │   ├── decompiler/         # Decompilation engine
-│   │   └── symbols/            # Symbol table management
-│   ├── ui/                     # Qt UI components
-│   │   ├── MainWindow.{h,cpp,ui}
-│   │   ├── panels/             # UI panels (.ui files)
-│   │   └── widgets/            # Custom Qt widgets
-│   └── utils/                  # Utilities
-├── include/                    # Public headers
-├── resources/                  # Qt resources (icons, etc.)
-├── tests/                      # Unit tests
+│   ├── core/disasm/x86/        # X86 disassembler (C++)
+│   └── ui/                     # Qt UI components
+│       └── MainWindow.{h,cpp,ui}
+├── include/
+│   └── vbdecompiler_ffi.h      # C FFI header
+├── tests/                      # C++ unit tests
 └── docs/                       # Documentation
 ```
 
@@ -55,6 +89,7 @@ VBDecompiler/
 
 ### Prerequisites
 
+- **Rust** 1.70+ (`cargo`, `rustc`)
 - **CMake** 3.20 or later
 - **Qt 6.5+** (Core, Widgets, Gui modules)
 - **C++23 compatible compiler**:
@@ -69,28 +104,34 @@ VBDecompiler/
 git clone https://github.com/yourusername/VBDecompiler.git
 cd VBDecompiler
 
-# Create build directory
+# Rust builds automatically during CMake build
 mkdir build && cd build
 
-# Configure with CMake
+# Configure with CMake (builds Rust library automatically)
 cmake ..
 
 # Build
 cmake --build .
 
-# Run
+# Run GUI
 ./bin/vbdecompiler
+
+# Or use the CLI tool directly
+cargo run --bin vbdecompiler-cli -- decompile <file.exe>
 ```
 
 ### Linux/macOS
 
 ```bash
-# Install Qt 6
+# Install dependencies
 # Ubuntu/Debian:
-sudo apt install qt6-base-dev cmake g++-13
+sudo apt install qt6-base-dev cmake g++-13 cargo
+
+# Arch Linux:
+sudo pacman -S qt6-base cmake gcc rust
 
 # macOS (Homebrew):
-brew install qt@6 cmake
+brew install qt@6 cmake rust
 
 # Build
 mkdir build && cd build
@@ -101,6 +142,7 @@ make -j$(nproc)
 ### Windows
 
 ```bash
+# Install Rust from https://rustup.rs/
 # Install Qt 6 from https://www.qt.io/download
 # Install Visual Studio 2022 with C++ workload
 
@@ -112,13 +154,24 @@ cmake --build . --config Release
 
 ## Usage
 
-### Opening a VB Executable
+### GUI Application
+
+Launch the Qt6 GUI application:
 
 ```bash
-vbdecompiler /path/to/executable.exe
+# From build directory
+./bin/vbdecompiler
+
+# Or from install location
+vbdecompiler
 ```
 
-### UI Overview
+**Opening a File:**
+1. Click **File → Open** or use the toolbar button
+2. Select a VB5/6 executable (.exe, .dll, or .ocx)
+3. The decompiler will parse the binary and populate the UI
+
+**UI Overview:**
 
 The VBDecompiler workspace consists of:
 
@@ -140,9 +193,118 @@ The VBDecompiler workspace consists of:
 - **Functions**: Function table with addresses
 - **Equates**: Constants and enums
 
-### Switching Between P-Code and x86 Views
+**Switching Between P-Code and x86 Views:**
 
 Use the **View** menu or toolbar button to toggle between P-Code (VB intermediate language) and x86 native assembly views.
+
+### Command-Line Tool
+
+For batch processing or scripting, use the Rust CLI:
+
+```bash
+# Decompile a VB executable
+cargo run --bin vbdecompiler-cli -- decompile input.exe
+
+# Output to file
+cargo run --bin vbdecompiler-cli -- decompile input.exe --output output.vb
+
+# With detailed logging
+RUST_LOG=debug cargo run --bin vbdecompiler-cli -- decompile input.exe
+```
+
+### Programmatic API (Rust)
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+vbdecompiler-core = { path = "./crates/vbdecompiler-core" }
+```
+
+Example usage:
+
+```rust
+use vbdecompiler_core::{Decompiler, DecompilerOptions};
+use std::path::Path;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let options = DecompilerOptions::default();
+    let decompiler = Decompiler::new(options);
+    let result = decompiler.decompile_file(Path::new("input.exe"))?;
+    
+    println!("Decompiled {} methods", result.methods.len());
+    for method in result.methods {
+        println!("Method at 0x{:08x}:\n{}", method.address, method.code);
+    }
+    Ok(())
+}
+```
+
+## Testing
+
+### Rust Core Tests
+
+The Rust decompilation core has comprehensive unit tests:
+
+```bash
+# Run all Rust tests
+cargo test --all
+
+# Run with output
+cargo test --all -- --nocapture
+
+# Run specific crate tests
+cargo test -p vbdecompiler-core
+
+# With coverage (requires cargo-tarpaulin)
+cargo tarpaulin --all --out Html
+```
+
+### C++ Tests
+
+C++ tests focus on the X86 disassembler component:
+
+```bash
+# Build tests
+cd build
+cmake --build . --target test_x86
+
+# Run tests
+./bin/test_x86
+```
+
+### Integration Testing
+
+To test the full GUI → FFI → Rust pipeline:
+
+1. Build the complete project:
+   ```bash
+   mkdir build && cd build
+   cmake .. && cmake --build .
+   ```
+
+2. Run the GUI:
+   ```bash
+   ./bin/vbdecompiler
+   ```
+
+3. Load a test VB executable (P-Code compiled VB5/6 binary)
+
+4. Verify:
+   - No crashes during file loading
+   - Decompiled output appears in the center panel
+   - Symbol tree populates with discovered methods
+   - Log output shows parsing progress
+
+### Sample Test Files
+
+The project includes sample VB executables for testing:
+
+- `tests/samples/simple_pcode.exe` - Basic P-Code executable
+- `tests/samples/forms_app.exe` - VB app with forms
+- `tests/samples/native_code.exe` - Native-compiled VB (x86 only)
+
+Note: These are not included in the repository due to size. You can create test binaries using Visual Basic 6.0 IDE with "Compile to P-Code" option.
 
 ## VB Binary Support
 

@@ -1,13 +1,13 @@
 #include "core/disasm/x86/X86Disassembler.h"
-#include <iostream>
-#include <iomanip>
+#include <format>
 #include <vector>
+#include <cstdio>
 
 using namespace VBDecompiler;
 
 int main() {
-    std::cout << "X86 Disassembler Test\n";
-    std::cout << "====================\n\n";
+    std::puts("X86 Disassembler Test");
+    std::puts("====================\n");
 
     // Simple x86 code: MOV EAX, 42; RET
     std::vector<uint8_t> code = {
@@ -15,41 +15,38 @@ int main() {
         0xC3                           // RET
     };
 
-    std::cout << "Disassembling bytes: ";
+    std::fputs("Disassembling bytes: ", stdout);
     for (auto byte : code) {
-        std::cout << std::hex << std::setw(2) << std::setfill('0') 
-                  << static_cast<int>(byte) << " ";
+        std::fputs(std::format("{:02x} ", byte).c_str(), stdout);
     }
-    std::cout << std::dec << "\n\n";
+    std::puts("\n");
 
     X86Disassembler disasm;
     auto instructions = disasm.disassemble(std::span<const uint8_t>(code.data(), code.size()), 0);
 
     if (instructions.empty()) {
-        std::cerr << "Failed to disassemble\n";
+        std::fputs("Failed to disassemble\n", stderr);
         return 1;
     }
 
-    std::cout << "Disassembled " << instructions.size() << " instruction(s):\n\n";
+    std::puts(std::format("Disassembled {} instruction(s):\n", instructions.size()).c_str());
 
     for (const auto& instr : instructions) {
-        std::cout << "0x" << std::hex << std::setw(8) << std::setfill('0') 
-                  << instr.getAddress() << "  ";
+        std::fputs(std::format("0x{:08x}  ", instr.getAddress()).c_str(), stdout);
         
         // Print bytes
         for (size_t i = 0; i < instr.getLength(); ++i) {
-            std::cout << std::setw(2) << std::setfill('0') 
-                      << static_cast<int>(code[instr.getAddress() + i]) << " ";
+            std::fputs(std::format("{:02x} ", code[instr.getAddress() + i]).c_str(), stdout);
         }
         
         // Padding
         for (size_t i = instr.getLength(); i < 10; ++i) {
-            std::cout << "   ";
+            std::fputs("   ", stdout);
         }
         
-        std::cout << std::dec << instr.getMnemonic() << "\n";
+        std::puts(instr.getMnemonic().c_str());
     }
 
-    std::cout << "\nTest PASSED\n";
+    std::puts("\nTest PASSED");
     return 0;
 }

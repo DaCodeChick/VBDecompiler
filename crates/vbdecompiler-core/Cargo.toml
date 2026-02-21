@@ -15,6 +15,7 @@ serde.workspace = true
 serde_json.workspace = true
 goblin.workspace = true
 scroll.workspace = true
+rayon.workspace = true
 
 # Logging
 log = "0.4"

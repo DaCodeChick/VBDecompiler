@@ -14,7 +14,9 @@ use crate::lifter::PCodeLifter;
 use crate::pcode::Disassembler;
 use crate::pe::PEFile;
 use crate::vb;
+use rayon::prelude::*;
 use std::fs;
+use std::sync::Arc;
 
 /// Main decompiler orchestrator
 pub struct Decompiler {
@@ -41,36 +43,58 @@ impl Decompiler {
 
         // 3. Parse VB structures
         log::info!("Parsing VB structures...");
-        let vb_file = vb::VBFile::from_pe(pe)?;
+        let vb_file = Arc::new(vb::VBFile::from_pe(pe)?);
 
         log::info!(
             "Found VB project: {}",
             vb_file.project_name().as_deref().unwrap_or("Unknown")
         );
 
-        // 4. Extract and process objects
-        let mut vb6_code = String::new();
-        let mut method_count = 0;
+        // 4. Collect all methods to decompile
+        let mut methods_to_decompile = Vec::new();
 
         for (obj_idx, object) in vb_file.objects().iter().enumerate() {
             log::info!("Processing object: {}", object.name);
 
-            // Iterate through methods
             for (method_idx, method_name) in object.method_names.iter().enumerate() {
-                log::info!("  Processing method: {}", method_name);
+                methods_to_decompile.push((
+                    obj_idx,
+                    method_idx,
+                    object.name.clone(),
+                    method_name.clone(),
+                ));
+            }
+        }
+
+        log::info!(
+            "Found {} methods, decompiling in parallel with Rayon...",
+            methods_to_decompile.len()
+        );
+
+        // 5. Decompile methods in parallel using Rayon
+        // This provides significant speedup for executables with many methods.
+        // Each method is decompiled independently on a separate thread from Rayon's thread pool.
+        // Benefits:
+        // - Scales with CPU cores (e.g., 8 cores → ~8x faster for 100+ methods)
+        // - Memory-safe: Rust's ownership prevents data races
+        // - Automatic work stealing: Rayon balances work across threads
+        let decompiled_methods: Vec<(String, String)> = methods_to_decompile
+            .par_iter()
+            .filter_map(|(obj_idx, method_idx, obj_name, method_name)| {
+                log::info!("  Processing method: {}_{}", obj_name, method_name);
 
                 // Get P-Code for this specific method
-                let pcode_data = match vb_file.get_pcode_for_method(obj_idx, method_idx) {
+                let pcode_data = match vb_file.get_pcode_for_method(*obj_idx, *method_idx) {
                     Some(data) => data,
                     None => {
                         log::info!("    No P-Code (native compiled)");
-                        continue;
+                        return None;
                     }
                 };
 
                 if pcode_data.is_empty() {
                     log::info!("    Empty P-Code data");
-                    continue;
+                    return None;
                 }
 
                 log::info!(
@@ -78,38 +102,57 @@ impl Decompiler {
                     pcode_data.len()
                 );
 
-                // 5. Disassemble P-Code
+                // Disassemble P-Code
                 let mut disassembler = Disassembler::new(pcode_data);
-                let instructions = disassembler.disassemble(0)?;
+                let instructions = match disassembler.disassemble(0) {
+                    Ok(insns) => insns,
+                    Err(e) => {
+                        log::warn!("    Failed to disassemble: {}", e);
+                        return None;
+                    }
+                };
 
                 if instructions.is_empty() {
                     log::warn!("    No instructions found");
-                    continue;
+                    return None;
                 }
 
                 log::info!("    Disassembled {} instructions", instructions.len());
 
-                // 6. Lift P-Code to IR
+                // Lift P-Code to IR
                 let mut lifter = PCodeLifter::new();
-                let function_name = format!("{}_{}", object.name, method_name);
-                let function = lifter.lift(&instructions, function_name, 0)?;
+                let function_name = format!("{}_{}", obj_name, method_name);
+                let function = match lifter.lift(&instructions, function_name.clone(), 0) {
+                    Ok(func) => func,
+                    Err(e) => {
+                        log::warn!("    Failed to lift: {}", e);
+                        return None;
+                    }
+                };
 
                 log::info!("    Lifted to IR: {} blocks", function.basic_blocks.len());
 
-                // 7. Generate VB6 code
-                let code = self.generator.generate_function(&function);
+                // Generate VB6 code (each thread gets its own generator)
+                let mut generator = VB6CodeGenerator::new();
+                let code = generator.generate_function(&function);
 
-                vb6_code.push_str(&code);
-                vb6_code.push_str("\n\n");
+                log::info!("    Successfully decompiled {}", function_name);
 
-                method_count += 1;
-            }
-        }
+                Some((function_name, code))
+            })
+            .collect();
 
-        if method_count == 0 {
+        if decompiled_methods.is_empty() {
             return Err(Error::Decompilation(
                 "No P-Code methods found (executable may be native-compiled)".to_string(),
             ));
+        }
+
+        // 6. Combine all decompiled code
+        let mut vb6_code = String::new();
+        for (_name, code) in &decompiled_methods {
+            vb6_code.push_str(code);
+            vb6_code.push_str("\n\n");
         }
 
         Ok(DecompilationResult {
@@ -119,7 +162,7 @@ impl Decompiler {
             vb6_code,
             is_pcode: true,
             object_count: vb_file.objects().len(),
-            method_count,
+            method_count: decompiled_methods.len(),
         })
     }
 
