@@ -1,13 +1,12 @@
 #include "core/disasm/x86/X86Disassembler.h"
-#include <iostream>
-#include <iomanip>
+#include <print>
 #include <vector>
 
 using namespace VBDecompiler;
 
 int main() {
-    std::cout << "X86 Disassembler Test\n";
-    std::cout << "====================\n\n";
+    std::println("X86 Disassembler Test");
+    std::println("====================\n");
 
     // Simple x86 code: MOV EAX, 42; RET
     std::vector<uint8_t> code = {
@@ -15,41 +14,38 @@ int main() {
         0xC3                           // RET
     };
 
-    std::cout << "Disassembling bytes: ";
+    std::print("Disassembling bytes: ");
     for (auto byte : code) {
-        std::cout << std::hex << std::setw(2) << std::setfill('0') 
-                  << static_cast<int>(byte) << " ";
+        std::print("{:02x} ", byte);
     }
-    std::cout << std::dec << "\n\n";
+    std::println("\n");
 
     X86Disassembler disasm;
     auto instructions = disasm.disassemble(std::span<const uint8_t>(code.data(), code.size()), 0);
 
     if (instructions.empty()) {
-        std::cerr << "Failed to disassemble\n";
+        std::println(stderr, "Failed to disassemble");
         return 1;
     }
 
-    std::cout << "Disassembled " << instructions.size() << " instruction(s):\n\n";
+    std::println("Disassembled {} instruction(s):\n", instructions.size());
 
     for (const auto& instr : instructions) {
-        std::cout << "0x" << std::hex << std::setw(8) << std::setfill('0') 
-                  << instr.getAddress() << "  ";
+        std::print("0x{:08x}  ", instr.getAddress());
         
         // Print bytes
         for (size_t i = 0; i < instr.getLength(); ++i) {
-            std::cout << std::setw(2) << std::setfill('0') 
-                      << static_cast<int>(code[instr.getAddress() + i]) << " ";
+            std::print("{:02x} ", code[instr.getAddress() + i]);
         }
         
         // Padding
         for (size_t i = instr.getLength(); i < 10; ++i) {
-            std::cout << "   ";
+            std::print("   ");
         }
         
-        std::cout << std::dec << instr.getMnemonic() << "\n";
+        std::println("{}", instr.getMnemonic());
     }
 
-    std::cout << "\nTest PASSED\n";
+    std::println("\nTest PASSED");
     return 0;
 }
