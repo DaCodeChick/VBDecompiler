@@ -4,24 +4,21 @@
 
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
-#include "../core/pe/PEFile.h"
-#include "../core/vb/VBFile.h"
-#include "../core/disasm/pcode/PCodeDisassembler.h"
-#include "../core/ir/PCodeLifter.h"
-#include "../core/decompiler/Decompiler.h"
+#include "../../include/vbdecompiler_ffi.h"
 #include <QFileDialog>
 #include <QMessageBox>
-#include <filesystem>
 #include <sstream>
-
-using namespace VBDecompiler;
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , decompiler(nullptr)
 {
     ui->setupUi(this);
     setupConnections();
+    
+    // Initialize Rust decompiler
+    decompiler = vbdecompiler_new();
     
     setWindowTitle("VBDecompiler - Visual Basic 5/6 Decompiler");
     resize(1280, 800);
@@ -29,6 +26,9 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    if (decompiler) {
+        vbdecompiler_free(decompiler);
+    }
     delete ui;
 }
 
@@ -59,7 +59,7 @@ void MainWindow::onAbout()
         tr("About VBDecompiler"),
         tr("<h3>VBDecompiler 1.0.0</h3>"
            "<p>A Ghidra-style decompiler for Visual Basic 5/6 executables.</p>"
-           "<p>Built with C++23 and Qt 6.</p>"
+           "<p>Built with Rust core and Qt 6 GUI.</p>"
            "<p><b>Features:</b></p>"
            "<ul>"
            "<li>P-Code and x86 disassembly</li>"
@@ -76,140 +76,78 @@ void MainWindow::loadFile(const QString& filePath)
     ui->codeEditor->clear();
     statusBar()->showMessage(tr("Loading: %1").arg(filePath));
     
-    try {
-        // Step 1: Parse PE file
-        auto peFile = std::make_unique<PEFile>(std::filesystem::path(filePath.toStdString()));
-        if (!peFile->parse()) {
-            QMessageBox::critical(
-                this,
-                tr("PE Parse Error"),
-                tr("Failed to parse PE file:\n%1").arg(QString::fromStdString(peFile->getLastError()))
-            );
-            statusBar()->showMessage(tr("Failed to load file"), 5000);
-            return;
-        }
-        
-        // Step 2: Parse VB structures
-        auto vbFile = std::make_unique<VBFile>(std::move(peFile));
-        if (!vbFile->parse()) {
-            QMessageBox::critical(
-                this,
-                tr("VB Parse Error"),
-                tr("Failed to parse VB structures:\n%1").arg(QString::fromStdString(vbFile->getLastError()))
-            );
-            statusBar()->showMessage(tr("Not a valid VB file"), 5000);
-            return;
-        }
-        
-        // Check if P-Code or native
-        if (!vbFile->isPCode()) {
-            QMessageBox::warning(
-                this,
-                tr("Native Code"),
-                tr("This executable contains native x86 code.\n"
-                   "Native code decompilation is partially implemented (70%).\n"
-                   "Only P-Code executables are fully supported.")
-            );
-            statusBar()->showMessage(tr("Native code not fully supported"), 5000);
-            return;
-        }
-        
-        // Display project info
-        std::ostringstream output;
-        output << "' VBDecompiler - Decompiled from: " << filePath.toStdString() << "\n";
-        output << "' Project: " << vbFile->getProjectName() << "\n";
-        output << "' P-Code: Yes\n";
-        output << "' Objects: " << vbFile->getObjectCount() << "\n";
-        output << "'\n\n";
-        
-        // Step 3: Decompile each object
-        PCodeDisassembler disassembler;
-        PCodeLifter lifter;
-        Decompiler decompiler;
-        
-        bool anyMethodsDecompiled = false;
-        
-        for (size_t objIdx = 0; objIdx < vbFile->getObjects().size(); ++objIdx) {
-            const auto& obj = vbFile->getObjects()[objIdx];
-            
-            output << "' ========================================\n";
-            output << "' Object: " << obj.name << "\n";
-            if (obj.isForm()) {
-                output << "' Type: Form\n";
-            } else if (obj.isModule()) {
-                output << "' Type: Module\n";
-            } else if (obj.isClass()) {
-                output << "' Type: Class\n";
-            }
-            
-            if (!obj.info) {
-                output << "' No method info available\n\n";
-                continue;
-            }
-            
-            output << "' Methods: " << obj.info->wMethodCount << "\n";
-            output << "' ========================================\n\n";
-            
-            // Decompile each method in the object
-            for (size_t methodIdx = 0; methodIdx < obj.methodNames.size(); ++methodIdx) {
-                const auto& methodName = obj.methodNames[methodIdx];
-                
-                // Extract P-Code bytes
-                auto pcodeBytes = vbFile->getPCodeForMethod(static_cast<uint32_t>(objIdx), 
-                                                            static_cast<uint32_t>(methodIdx));
-                
-                if (pcodeBytes.empty()) {
-                    output << "' Method: " << methodName << " (no P-Code)\n\n";
-                    continue;
-                }
-                
-                // Disassemble P-Code
-                std::span<const uint8_t> pcodeSpan(pcodeBytes.data(), pcodeBytes.size());
-                auto instructions = disassembler.disassembleProcedure(pcodeSpan, 0, 0);
-                
-                if (instructions.empty()) {
-                    output << "' Method: " << methodName << " (disassembly failed)\n\n";
-                    continue;
-                }
-                
-                // Lift to IR
-                auto irFunction = lifter.lift(instructions, methodName, 0);
-                if (!irFunction) {
-                    output << "' Method: " << methodName << " (IR lift failed)\n\n";
-                    continue;
-                }
-                
-                // Decompile to VB6
-                std::string vbCode = decompiler.decompile(*irFunction);
-                output << vbCode << "\n\n";
-                
-                anyMethodsDecompiled = true;
-            }
-        }
-        
-        if (!anyMethodsDecompiled) {
-            output << "' No methods could be decompiled.\n";
-            output << "' This might be due to:\n";
-            output << "'   - Unsupported VB version\n";
-            output << "'   - Corrupted or packed executable\n";
-            output << "'   - Native code (not P-Code)\n";
-        }
-        
-        // Display results
-        ui->codeEditor->setPlainText(QString::fromStdString(output.str()));
-        statusBar()->showMessage(
-            tr("Successfully decompiled %1 (%2 objects)")
-                .arg(filePath)
-                .arg(vbFile->getObjectCount()), 
-            10000
+    if (!decompiler) {
+        QMessageBox::critical(
+            this,
+            tr("Error"),
+            tr("Decompiler not initialized")
         );
+        return;
+    }
+    
+    // Call Rust decompiler via FFI
+    VBDecompilationResult* result = nullptr;
+    std::string path = filePath.toStdString();
+    int status = vbdecompiler_decompile_file(decompiler, path.c_str(), &result);
+    
+    if (status != 0) {
+        // Error occurred
+        QString errorMsg;
+        switch (status) {
+            case -1:
+                errorMsg = tr("Invalid argument");
+                break;
+            case -2:
+                errorMsg = tr("Invalid UTF-8 in path");
+                break;
+            case -3:
+                errorMsg = tr("Decompilation failed. This might be due to:\n"
+                             "  - Unsupported VB version\n"
+                             "  - Corrupted or packed executable\n"
+                             "  - Native code (not P-Code)\n"
+                             "  - Invalid VB5/6 executable");
+                break;
+            default:
+                errorMsg = tr("Unknown error (code: %1)").arg(status);
+                break;
+        }
         
-    } catch (const std::exception& e) {
         QMessageBox::critical(
             this,
             tr("Decompilation Error"),
-            tr("An error occurred during decompilation:\n%1").arg(e.what())
+            errorMsg
         );
         statusBar()->showMessage(tr("Decompilation failed"), 5000);
+        return;
+    }
+    
+    // Success - display results
+    if (result) {
+        std::ostringstream output;
+        
+        // Header
+        output << "' VBDecompiler - Decompiled from: " << path << "\n";
+        output << "' Project: " << result->project_name << "\n";
+        output << "' P-Code: " << (result->is_pcode ? "Yes" : "No") << "\n";
+        output << "' Objects: " << result->object_count << "\n";
+        output << "' Methods: " << result->method_count << "\n";
+        output << "'\n\n";
+        
+        // Generated VB6 code
+        output << result->vb6_code;
+        
+        // Display in editor
+        ui->codeEditor->setPlainText(QString::fromStdString(output.str()));
+        
+        statusBar()->showMessage(
+            tr("Successfully decompiled %1 (%2 objects, %3 methods)")
+                .arg(filePath)
+                .arg(result->object_count)
+                .arg(result->method_count),
+            10000
+        );
+        
+        // Free the result
+        vbdecompiler_free_result(result);
     }
 }

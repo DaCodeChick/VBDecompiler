@@ -7,6 +7,9 @@
 
 #include <QMainWindow>
 
+// Forward declare C FFI type
+struct VBDecompilerHandle;
+
 namespace Ui {
 class MainWindow;
 }
@@ -25,6 +28,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+    VBDecompilerHandle* decompiler;
     
     void setupConnections();
     void loadFile(const QString& filePath);

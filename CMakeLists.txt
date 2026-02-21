@@ -19,6 +19,25 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# Build Rust library first
+set(RUST_BUILD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/target)
+set(RUST_LIB_DIR ${RUST_BUILD_DIR}/$<IF:$<CONFIG:Debug>,debug,release>)
+
+# Determine Rust library name based on platform
+if(WIN32)
+    set(RUST_FFI_LIB ${RUST_LIB_DIR}/vbdecompiler_ffi.lib)
+else()
+    set(RUST_FFI_LIB ${RUST_LIB_DIR}/libvbdecompiler_ffi.a)
+endif()
+
+# Custom target to build Rust library
+add_custom_target(rust_build ALL
+    COMMAND cargo build $<IF:$<CONFIG:Debug>,,--release> --package vbdecompiler-ffi
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Building Rust FFI library..."
+    BYPRODUCTS ${RUST_FFI_LIB}
+)
+
 # C++ source files (x86 disassembler only - core decompilation is in Rust)
 set(CORE_SOURCES
     src/core/disasm/x86/X86Instruction.cpp
@@ -43,6 +62,9 @@ add_executable(vbdecompiler
     ${UI_SOURCES}
 )
 
+# Make sure Rust is built before linking
+add_dependencies(vbdecompiler rust_build)
+
 # Link Qt libraries
 target_link_libraries(vbdecompiler PRIVATE
     Qt6::Core
@@ -50,9 +72,36 @@ target_link_libraries(vbdecompiler PRIVATE
     Qt6::Gui
 )
 
+# Link Rust FFI library
+target_link_libraries(vbdecompiler PRIVATE
+    ${RUST_FFI_LIB}
+)
+
+# On Unix systems, also need to link pthread and dl
+if(UNIX AND NOT APPLE)
+    target_link_libraries(vbdecompiler PRIVATE
+        pthread
+        dl
+        m
+    )
+elseif(APPLE)
+    target_link_libraries(vbdecompiler PRIVATE
+        "-framework Security"
+        "-framework CoreFoundation"
+    )
+elseif(WIN32)
+    target_link_libraries(vbdecompiler PRIVATE
+        ws2_32
+        userenv
+        bcrypt
+        ntdll
+    )
+endif()
+
 # Include directories
 target_include_directories(vbdecompiler PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 # Compiler options
