@@ -66,69 +66,28 @@ impl PEFile {
             )));
         }
 
+        // VB6 executables often have non-standard resource structures that goblin can't parse,
+        // but resources aren't needed for VB decompilation (we only need headers, sections, imports).
+        // Proactively remove the resource directory to avoid parsing issues.
+        if let Some(fixed_data) = Self::try_remove_resource_directory(&data) {
+            log::debug!("Removed resource directory to avoid VB6 compatibility issues");
+            data = fixed_data;
+        }
+
         // Try parsing with permissive mode
         let mut opts = goblin::pe::options::ParseOptions::default();
         opts.parse_mode = goblin::options::ParseMode::Permissive;
 
-        // Attempt to parse
-        let parse_result = unsafe {
+        // Parse PE using goblin
+        // SAFETY: We need to transmute the lifetime to 'static to store the PE struct.
+        // The PE struct holds references into the data vector, and we ensure both live
+        // for the same lifetime by storing them together in PEFile.
+        let pe: PE<'static> = unsafe {
             let data_ptr = data.as_ptr();
             let data_len = data.len();
             let static_slice = std::slice::from_raw_parts(data_ptr, data_len);
             goblin::pe::PE::parse_with_opts(static_slice, &opts)
-        };
-
-        // Handle parsing errors
-        let pe: PE<'static> = match parse_result {
-            Ok(pe) => pe,
-            Err(e) => {
-                // Check if error is related to resources
-                let err_str = format!("{}", e);
-                if err_str.contains("ResourceString") || err_str.contains("resource") {
-                    log::warn!("Corrupted resource section detected: {}", e);
-                    log::info!("Attempting to parse without resources...");
-
-                    // Try to zero out the resource directory entry
-                    if let Some(fixed_data) = Self::try_remove_resource_directory(&data) {
-                        // Replace data with fixed version FIRST, before parsing
-                        data = fixed_data;
-
-                        // Now parse with the fixed data that's in its final location
-                        unsafe {
-                            let data_ptr = data.as_ptr();
-                            let data_len = data.len();
-                            let static_slice = std::slice::from_raw_parts(data_ptr, data_len);
-
-                            match goblin::pe::PE::parse_with_opts(static_slice, &opts) {
-                                Ok(pe) => {
-                                    log::info!(
-                                        "Successfully parsed PE after removing resource directory"
-                                    );
-                                    pe
-                                }
-                                Err(e2) => {
-                                    log::error!(
-                                        "Failed to parse even after removing resources: {}",
-                                        e2
-                                    );
-                                    return Err(Error::invalid_pe(format!(
-                                        "Corrupted PE resource section. Attempted workaround failed.\n\
-                                         Original error: {}", e
-                                    )));
-                                }
-                            }
-                        }
-                    } else {
-                        return Err(Error::invalid_pe(format!(
-                            "Corrupted PE resource section and unable to apply workaround.\n\
-                             Original error: {}",
-                            e
-                        )));
-                    }
-                } else {
-                    return Err(Error::invalid_pe(format!("Failed to parse PE file: {}", e)));
-                }
-            }
+                .map_err(|e| Error::invalid_pe(format!("Failed to parse PE file: {}", e)))?
         };
 
         // Continue with rest of validation
