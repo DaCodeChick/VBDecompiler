@@ -39,7 +39,7 @@ impl PEFile {
     }
 
     /// Parse a PE file from bytes
-    pub fn from_bytes(data: Vec<u8>) -> Result<Self> {
+    pub fn from_bytes(mut data: Vec<u8>) -> Result<Self> {
         if data.len() < 64 {
             return Err(Error::invalid_pe("File too small to contain DOS header"));
         }
@@ -66,18 +66,106 @@ impl PEFile {
             )));
         }
 
-        // Parse PE using goblin
-        // SAFETY: We need to transmute the lifetime to 'static to store the PE struct.
-        // The PE struct holds references into the data vector, and we ensure both live
-        // for the same lifetime by storing them together in PEFile.
-        let pe: PE<'static> = unsafe {
+        // Try parsing with permissive mode
+        let mut opts = goblin::pe::options::ParseOptions::default();
+        opts.parse_mode = goblin::options::ParseMode::Permissive;
+
+        // Attempt to parse
+        let parse_result = unsafe {
             let data_ptr = data.as_ptr();
             let data_len = data.len();
             let static_slice = std::slice::from_raw_parts(data_ptr, data_len);
-            goblin::pe::PE::parse(static_slice)
-                .map_err(|e| Error::invalid_pe(format!("Failed to parse PE file: {}", e)))?
+            goblin::pe::PE::parse_with_opts(static_slice, &opts)
         };
 
+        // Handle parsing errors
+        let pe: PE<'static> = match parse_result {
+            Ok(pe) => pe,
+            Err(e) => {
+                // Check if error is related to resources
+                let err_str = format!("{}", e);
+                if err_str.contains("ResourceString") || err_str.contains("resource") {
+                    log::warn!("Corrupted resource section detected: {}", e);
+                    log::info!("Attempting to parse without resources...");
+
+                    // Try to zero out the resource directory entry
+                    if let Some(fixed_data) = Self::try_remove_resource_directory(&data) {
+                        // Replace data with fixed version FIRST, before parsing
+                        data = fixed_data;
+
+                        // Now parse with the fixed data that's in its final location
+                        unsafe {
+                            let data_ptr = data.as_ptr();
+                            let data_len = data.len();
+                            let static_slice = std::slice::from_raw_parts(data_ptr, data_len);
+
+                            match goblin::pe::PE::parse_with_opts(static_slice, &opts) {
+                                Ok(pe) => {
+                                    log::info!(
+                                        "Successfully parsed PE after removing resource directory"
+                                    );
+                                    pe
+                                }
+                                Err(e2) => {
+                                    log::error!(
+                                        "Failed to parse even after removing resources: {}",
+                                        e2
+                                    );
+                                    return Err(Error::invalid_pe(format!(
+                                        "Corrupted PE resource section. Attempted workaround failed.\n\
+                                         Original error: {}", e
+                                    )));
+                                }
+                            }
+                        }
+                    } else {
+                        return Err(Error::invalid_pe(format!(
+                            "Corrupted PE resource section and unable to apply workaround.\n\
+                             Original error: {}",
+                            e
+                        )));
+                    }
+                } else {
+                    return Err(Error::invalid_pe(format!("Failed to parse PE file: {}", e)));
+                }
+            }
+        };
+
+        // Continue with rest of validation
+        Self::validate_and_create(data, pe)
+    }
+
+    /// Try to remove the resource directory entry from PE optional header
+    fn try_remove_resource_directory(data: &[u8]) -> Option<Vec<u8>> {
+        if data.len() < 0x3c + 4 {
+            return None;
+        }
+
+        // Read PE offset from DOS header
+        let pe_offset =
+            u32::from_le_bytes([data[0x3c], data[0x3c + 1], data[0x3c + 2], data[0x3c + 3]])
+                as usize;
+
+        // Optional header starts after PE signature (4 bytes) + COFF header (20 bytes)
+        let opt_header_offset = pe_offset + 4 + 20;
+        // Resource directory entry is at offset 112 in optional header (for PE32)
+        let resource_dir_offset = opt_header_offset + 112;
+
+        if data.len() < resource_dir_offset + 8 {
+            return None;
+        }
+
+        // Create a copy and zero out resource directory entry (8 bytes: RVA + Size)
+        let mut data_copy = data.to_vec();
+        for i in resource_dir_offset..resource_dir_offset + 8 {
+            data_copy[i] = 0;
+        }
+
+        Some(data_copy)
+    }
+
+    /// Validate PE and create PEFile struct (extracted to reduce duplication)
+    fn validate_and_create(data: Vec<u8>, pe: PE<'static>) -> Result<Self> {
         // Validate PE type
         if !pe.is_lib && pe.header.optional_header.is_none() {
             return Err(Error::invalid_pe("Invalid PE optional header"));

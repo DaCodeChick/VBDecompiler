@@ -250,19 +250,29 @@ impl VBFile {
     /// Parse all VB structures
     fn parse(&mut self) -> Result<()> {
         // Find VB5! header
+        log::info!("Step 1: Finding VB5! header...");
         self.find_vb_header()?;
+        log::info!("Step 1 complete - VB5! header found");
 
         // Parse VB header
+        log::info!("Step 2: Parsing VB header...");
         self.parse_vb_header()?;
+        log::info!("Step 2 complete - VB header parsed");
 
         // Parse project info
+        log::info!("Step 3: Parsing project info...");
         self.parse_project_info()?;
+        log::info!("Step 3 complete - Project info parsed");
 
         // Parse object table
+        log::info!("Step 4: Parsing object table...");
         self.parse_object_table()?;
+        log::info!("Step 4 complete - Object table parsed");
 
         // Parse all objects
+        log::info!("Step 5: Parsing objects...");
         self.parse_objects()?;
+        log::info!("Step 5 complete - All objects parsed");
 
         Ok(())
     }
@@ -270,21 +280,51 @@ impl VBFile {
     /// Find the VB5! signature in the PE file
     fn find_vb_header(&mut self) -> Result<()> {
         // Search for "VB5!" signature in all sections
-        for section in self.pe_file.sections() {
+        log::debug!(
+            "Searching for VB5! signature in {} sections",
+            self.pe_file.sections().len()
+        );
+        for (idx, section) in self.pe_file.sections().iter().enumerate() {
             let start_rva = section.virtual_address;
+            let section_size = section.virtual_size as usize;
+
+            log::debug!(
+                "  Checking section {}: RVA=0x{:X}, size=0x{:X}",
+                idx,
+                start_rva,
+                section_size
+            );
+
+            // Limit section size to avoid hanging on corrupt huge sections
+            // VB header is typically in smaller sections, so 10MB is more than enough
+            let size_to_read = section_size.min(10 * 1024 * 1024);
+            if size_to_read < section_size {
+                log::warn!(
+                    "    Section {} size (0x{:X}) exceeds limit, only reading first 10MB",
+                    idx,
+                    section_size
+                );
+            }
 
             // Read section data
-            if let Some(data) = self
-                .pe_file
-                .read_at_rva(start_rva, section.virtual_size as usize)
-            {
+            if let Some(data) = self.pe_file.read_at_rva(start_rva, size_to_read) {
+                log::debug!("    Read {} bytes from section {}", data.len(), idx);
                 // Search for VB5! signature
                 for i in 0..data.len().saturating_sub(4) {
                     if &data[i..i + 4] == VB5_MAGIC {
                         self.vb_header_rva = start_rva + i as u32;
+                        log::info!(
+                            "Found VB5! at RVA 0x{:X} (section {} offset 0x{:X})",
+                            self.vb_header_rva,
+                            idx,
+                            i
+                        );
                         return Ok(());
                     }
                 }
+                log::debug!("    VB5! not found in section {}", idx);
+            } else {
+                log::debug!("    Could not read section {}", idx);
             }
         }
 
@@ -350,24 +390,47 @@ impl VBFile {
             .as_ref()
             .ok_or_else(|| Error::invalid_vb("Object table header not parsed"))?;
 
-        if object_table_header.w_total_objects == 0 {
+        let total_objects = object_table_header.w_total_objects;
+        if total_objects == 0 {
+            log::info!("No objects to parse");
             return Ok(()); // No objects
         }
 
+        // Sanity check: reasonable VB6 programs have at most a few hundred objects
+        // 65535 (0xFFFF) indicates corrupted data
+        if total_objects > 1000 {
+            return Err(Error::invalid_vb(format!(
+                "Unrealistic object count: {}. This indicates corrupted VB structures.",
+                total_objects
+            )));
+        }
+
+        log::info!("Parsing {} objects...", total_objects);
         let object_array_rva = self.va_to_rva(object_table_header.lp_object_array);
+        log::debug!("Object array at RVA 0x{:X}", object_array_rva);
 
         // Parse each object descriptor
-        for i in 0..object_table_header.w_total_objects {
+        for i in 0..total_objects {
+            log::info!("  Parsing object {}/{}", i + 1, total_objects);
             let obj_rva =
                 object_array_rva + (i as u32 * size_of::<VBPublicObjectDescriptor>() as u32);
 
             if let Ok(descriptor) = self.read_struct::<VBPublicObjectDescriptor>(obj_rva) {
-                if let Ok(obj) = self.parse_object(descriptor, i as u32) {
-                    self.objects.push(obj);
+                match self.parse_object(descriptor, i as u32) {
+                    Ok(obj) => {
+                        log::info!("    Successfully parsed object: {}", obj.name);
+                        self.objects.push(obj);
+                    }
+                    Err(e) => {
+                        log::warn!("    Failed to parse object {}: {}", i, e);
+                    }
                 }
+            } else {
+                log::warn!("    Failed to read descriptor for object {}", i);
             }
         }
 
+        log::info!("Successfully parsed {} objects", self.objects.len());
         Ok(())
     }
 
