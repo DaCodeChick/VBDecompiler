@@ -15,6 +15,9 @@ const DominatorTreeBuilder = @import("analysis/dominators.zig").DominatorTreeBui
 const dataflow_printer = @import("analysis/dataflow_printer.zig");
 const SSAConverter = @import("ir/ssa.zig").SSAConverter;
 const ssa_printer = @import("ir/ssa_printer.zig");
+const ConstraintCollector = @import("analysis/type_constraints.zig").ConstraintCollector;
+const TypeInferenceEngine = @import("analysis/type_inference.zig").TypeInferenceEngine;
+const TypePrinter = @import("analysis/type_printer.zig").TypePrinter;
 
 // Helper for printing to stdout (replaces c.printf)
 fn print(comptime fmt: []const u8, args: anytype) void {
@@ -41,6 +44,7 @@ const Command = enum {
     pcode,
     dataflow,
     ssa,
+    types,
     help,
 };
 
@@ -58,6 +62,7 @@ fn printUsage() void {
     print("  pcode <file> <address>      - Generate P-code IR for function\n", .{});
     print("  dataflow <file> <address>   - Perform data flow analysis on function\n", .{});
     print("  ssa <file> <address>        - Convert function to SSA form\n", .{});
+    print("  types <file> <address>      - Infer VB6 types for function variables\n", .{});
     print("  help                        - Show this help\n\n", .{});
     print("Examples:\n", .{});
     print("  vbdecomp analyze app.exe\n", .{});
@@ -70,6 +75,7 @@ fn printUsage() void {
     print("  vbdecomp pcode app.exe 0x401000\n", .{});
     print("  vbdecomp dataflow app.exe 0x401000\n", .{});
     print("  vbdecomp ssa app.exe 0x401000\n", .{});
+    print("  vbdecomp types app.exe 0x401000\n", .{});
 }
 
 fn parseCommand(arg: []const u8) ?Command {
@@ -83,6 +89,7 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "pcode")) return .pcode;
     if (std.mem.eql(u8, arg, "dataflow")) return .dataflow;
     if (std.mem.eql(u8, arg, "ssa")) return .ssa;
+    if (std.mem.eql(u8, arg, "types")) return .types;
     if (std.mem.eql(u8, arg, "help")) return .help;
     return null;
 }
@@ -665,6 +672,87 @@ fn cmdSSA(allocator: std.mem.Allocator, path: []const u8, address_str: []const u
     print("\n", .{});
 }
 
+fn cmdTypes(allocator: std.mem.Allocator, path: []const u8, address_str: []const u8) !void {
+    const address = try std.fmt.parseInt(u32, address_str, 0);
+    
+    const pe_file = try pe.parseFromFile(allocator, path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    const image_base = pe_file.getImageBase();
+    const rva = address - image_base;
+    
+    // Get code section
+    const section_data = pe_file.rvaToData(rva, 0x10000) orelse {
+        print("Error: Address 0x{X:0>8} is not mapped in any section\n", .{address});
+        return error.InvalidAddress;
+    };
+    
+    // Disassemble
+    var disassembler = disasm.Disassembler.init(allocator, section_data, address);
+    const instructions = try disassembler.disassemble(.{
+        .start_address = address,
+        .end_address = address + @as(u32, @intCast(@min(section_data.len, 0x10000))),
+        .max_instructions = 100,
+    });
+    defer allocator.free(instructions);
+    
+    // Build CFG
+    var cfg = CFG.init(allocator);
+    defer cfg.deinit();
+    
+    var cfg_builder = CFGBuilder.init(allocator, &cfg, section_data, address, .{});
+    defer cfg_builder.deinit();
+    
+    try cfg_builder.buildFunction(address);
+    
+    // Build P-code
+    var pcode_builder = PCodeBuilder.init(allocator);
+    defer pcode_builder.deinit();
+    
+    var pcode_func = try pcode_builder.buildFunction(&cfg, address, instructions);
+    defer pcode_func.deinit();
+    
+    // Build dominator tree
+    var dom_builder = DominatorTreeBuilder.init(allocator, &cfg, address);
+    var dom_tree = try dom_builder.build();
+    defer dom_tree.deinit();
+    
+    var dom_frontier = try dom_builder.buildDominanceFrontier(&dom_tree);
+    defer dom_frontier.deinit();
+    
+    // Convert to SSA
+    var ssa_converter = SSAConverter.init(allocator, &cfg, &pcode_func, &dom_tree, &dom_frontier);
+    defer ssa_converter.deinit();
+    
+    var ssa_func = try ssa_converter.convert();
+    defer ssa_func.deinit();
+    
+    // Run type inference
+    var engine = TypeInferenceEngine.init(allocator);
+    defer engine.deinit();
+    
+    try engine.inferFunction(&ssa_func);
+    
+    // Print results
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    const io = threaded.io();
+    
+    const stdout_file = std.Io.File.stdout();
+    var write_buffer: [8192]u8 = undefined;
+    var writer = stdout_file.writer(io, &write_buffer);
+    
+    var printer = TypePrinter.init(allocator);
+    try printer.printTypeInference(&writer.interface, &engine, &ssa_func);
+    try printer.printAnnotatedSSA(&writer.interface, &engine, &ssa_func);
+    try writer.flush();
+    
+    print("\n", .{});
+}
+
 // Conditionally export main only when building an executable
 pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
     // Setup arena allocator
@@ -799,6 +887,16 @@ pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
                 return 1;
             }
             cmdSSA(allocator, args[2], args[3]) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .types => {
+            if (args.len < 4) {
+                print("Error: types command requires a file path and address\n", .{});
+                return 1;
+            }
+            cmdTypes(allocator, args[2], args[3]) catch |err| {
                 print("Error: {s}\n", .{@errorName(err)});
                 return 1;
             };
