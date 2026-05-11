@@ -106,6 +106,40 @@ try writer.flush();
 
 Don't use old `std.fs.File.writer()` pattern.
 
+## Why C FFI is Used
+
+The project uses C FFI in two different ways:
+
+### 1. C API Export (Intended Design) ✅
+
+**Purpose**: Expose Zig functionality to the Qt/C++ GUI frontend
+
+- File: `core/src/lib.zig` and `bindings/include/vbdecomp.h`
+- Direction: Zig → C API → Qt/C++ GUI
+- Functions: `vbdecomp_open()`, `vbdecomp_analyze()`, etc.
+- **This is correct and essential** for the architecture
+
+### 2. C stdlib Import (Design Choice) ⚠️
+
+**Purpose**: Cross-platform file I/O and console output
+
+- Files: `core/src/main.zig`, `core/src/pe/parser.zig`
+- Direction: Zig ← C stdlib (`stdio.h`, `stdlib.h`)
+- Usage: `c.printf()`, `c.fopen()`, `c.fread()`, `c.fclose()`
+- **Rationale** (from `docs/architecture.md`):
+  - "Uses C standard library for maximum portability"
+  - "No platform-specific file APIs (no POSIX open/read, no Windows CreateFile)"
+
+**Note**: This is arguably unnecessary since:
+- Zig's `std.fs` and `std.io` already provide cross-platform abstractions
+- `std.debug.print()` works on all platforms
+- We already use `std.Io` interface in newer code (dataflow printer, etc.)
+
+**Recommendation for New Code**:
+- Prefer Zig stdlib (`std.fs`, `std.io`, `std.debug.print`) over C imports
+- The C imports are a legacy design choice that can be gradually replaced
+- Only use C API export (`lib.zig`) for the Qt GUI interface
+
 ## Project Structure
 
 ```
