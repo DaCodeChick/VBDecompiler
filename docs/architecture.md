@@ -208,6 +208,42 @@ GUI calls vbdecomp_decompile()
 VB6 pseudo-code displayed
 ```
 
+## Cross-Platform Support
+
+VB Decompiler is designed to work on **Windows, Linux, and macOS**.
+
+### Platform Compatibility Strategy
+
+**File I/O:**
+- Uses C standard library (fopen, fread, fseek) for maximum portability
+- No platform-specific file APIs (no POSIX open/read, no Windows CreateFile)
+
+**Path Handling:**
+- Accepts forward slashes on all platforms
+- Internally converts paths to platform-native format when needed
+
+**Memory Management:**
+- Pure Zig allocators work identically across platforms
+- No platform-specific memory APIs
+
+**GUI (Qt 6):**
+- Qt provides full cross-platform abstraction
+- Same codebase builds on all platforms
+- Native look and feel on each OS
+
+**Build System:**
+- CMake orchestrates multi-platform builds
+- Zig's cross-compilation capabilities enable building for any target
+- Separate build scripts for platform-specific packaging
+
+### Testing Matrix
+
+| Platform | Compiler | Status |
+|----------|----------|--------|
+| Linux x64 | Zig 0.16.0 + GCC 13 | ✅ Tested |
+| Windows x64 | Zig 0.16.0 + MSVC 2022 | 🔄 Planned |
+| macOS ARM64 | Zig 0.16.0 + Clang 16 | 🔄 Planned |
+
 ## Design Decisions
 
 ### Why Zig for Core?
@@ -217,6 +253,7 @@ VB6 pseudo-code displayed
 - **C interop**: Seamless C API generation
 - **Modern**: Better ergonomics than C
 - **No runtime**: Minimal dependencies
+- **Cross-compilation**: Build for any platform from any platform
 
 ### Why Qt for GUI?
 

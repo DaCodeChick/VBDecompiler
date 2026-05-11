@@ -4,6 +4,7 @@ A modern, open-source decompiler for Visual Basic 6 executables (EXE, DLL, OCX) 
 
 ## Features
 
+- **Cross-platform**: Works on Windows, Linux, and macOS
 - **Multi-format support**: Native code (x86), P-Code, DLL, and OCX files
 - **Multi-level analysis**: Disassembly → Intermediate Representation → High-level VB6 code
 - **Advanced GUI**: Qt 6-based interface with:
