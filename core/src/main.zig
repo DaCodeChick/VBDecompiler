@@ -6,6 +6,7 @@ const disasm = @import("disasm/disassembler.zig");
 const Instruction = @import("disasm/instruction.zig").Instruction;
 const CFG = @import("analysis/cfg.zig").CFG;
 const CFGBuilder = @import("analysis/cfg_builder.zig").CFGBuilder;
+const cfg_export = @import("analysis/cfg_export.zig");
 
 const c = @cImport({
     @cInclude("stdio.h");
@@ -18,6 +19,7 @@ const Command = enum {
     cfg,
     xrefs,
     blocks,
+    dot,
     help,
 };
 
@@ -31,6 +33,7 @@ fn printUsage() void {
     _ = c.printf("  cfg <file> <address>        - Analyze control flow at address (hex)\n");
     _ = c.printf("  xrefs <file> <address>      - Show cross-references to/from address (hex)\n");
     _ = c.printf("  blocks <file> <address>     - List basic blocks in function (hex)\n");
+    _ = c.printf("  dot <file> <address> [out]  - Export CFG to DOT format (Graphviz)\n");
     _ = c.printf("  help                        - Show this help\n\n");
     _ = c.printf("Examples:\n");
     _ = c.printf("  vbdecomp analyze app.exe\n");
@@ -39,6 +42,7 @@ fn printUsage() void {
     _ = c.printf("  vbdecomp cfg app.exe 0x401000\n");
     _ = c.printf("  vbdecomp xrefs app.exe 0x401000\n");
     _ = c.printf("  vbdecomp blocks app.exe 0x401000\n");
+    _ = c.printf("  vbdecomp dot app.exe 0x401000 cfg.dot\n");
 }
 
 fn parseCommand(arg: []const u8) ?Command {
@@ -48,6 +52,7 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "cfg")) return .cfg;
     if (std.mem.eql(u8, arg, "xrefs")) return .xrefs;
     if (std.mem.eql(u8, arg, "blocks")) return .blocks;
+    if (std.mem.eql(u8, arg, "dot")) return .dot;
     if (std.mem.eql(u8, arg, "help")) return .help;
     return null;
 }
@@ -333,8 +338,69 @@ fn cmdBlocks(allocator: std.mem.Allocator, path: []const u8, address_str: []cons
     _ = c.printf("\n");
 }
 
+fn cmdDot(allocator: std.mem.Allocator, path: []const u8, address_str: []const u8, output_path: ?[]const u8) !void {
+    // Parse address
+    const address = try std.fmt.parseInt(u32, address_str, 0);
+    
+    const pe_file = try pe.parseFromFile(allocator, path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    const image_base = pe_file.getImageBase();
+    const rva = address - image_base;
+    
+    // Get code section
+    const section_data = pe_file.rvaToData(rva, 0x10000) orelse {
+        _ = c.printf("Error: Address 0x%08X is not mapped in any section\n", address);
+        return error.InvalidAddress;
+    };
+    
+    // Build CFG
+    var cfg = CFG.init(allocator);
+    defer cfg.deinit();
+    
+    var builder = CFGBuilder.init(allocator, &cfg, section_data, address, .{});
+    defer builder.deinit();
+    
+    try builder.buildFunction(address);
+    
+    // Create Io instance for file operations
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    const io = threaded.io();
+    
+    // Export to DOT
+    if (output_path) |out_path| {
+        // Open file for writing
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), io, out_path, .{});
+        defer file.close(io);
+        
+        // Create writer with buffer
+        var write_buffer: [8192]u8 = undefined;
+        var writer = file.writer(io, &write_buffer);
+        
+        // Export - use the interface field to get std.Io.Writer
+        try cfg_export.exportFunctionToDot(allocator, &cfg, address, &writer.interface);
+        
+        // Flush any remaining buffered data
+        try writer.flush();
+        
+        _ = c.printf("CFG exported to %s\n", out_path.ptr);
+    } else {
+        // Write to stdout
+        const stdout_file = std.Io.File.stdout();
+        var write_buffer: [8192]u8 = undefined;
+        var writer = stdout_file.writer(io, &write_buffer);
+        
+        try cfg_export.exportFunctionToDot(allocator, &cfg, address, &writer.interface);
+        try writer.flush();
+    }
+}
+
 // Conditionally export main only when building an executable
-pub fn main(argc: c_int, argv: [*][*:0]u8) callconv(.C) c_int {
+pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
     // Setup arena allocator
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -426,6 +492,17 @@ pub fn main(argc: c_int, argv: [*][*:0]u8) callconv(.C) c_int {
                 return 1;
             }
             cmdBlocks(allocator, args[2], args[3]) catch |err| {
+                _ = c.printf("Error: %s\n", @errorName(err).ptr);
+                return 1;
+            };
+        },
+        .dot => {
+            if (args.len < 4) {
+                _ = c.printf("Error: dot command requires a file path and address\n");
+                return 1;
+            }
+            const output_file = if (args.len >= 5) args[4] else null;
+            cmdDot(allocator, args[2], args[3], output_file) catch |err| {
                 _ = c.printf("Error: %s\n", @errorName(err).ptr);
                 return 1;
             };
