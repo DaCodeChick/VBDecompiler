@@ -3,6 +3,8 @@ const std = @import("std");
 const pe = @import("pe/parser.zig");
 const vb6 = @import("vb6/detector.zig");
 const vb_structures = @import("vb6/structures.zig");
+const disasm = @import("disasm/disassembler.zig");
+const Instruction = @import("disasm/instruction.zig").Instruction;
 
 // C API types match header definitions
 const BinaryType = enum(c_int) {
@@ -280,10 +282,43 @@ export fn vbdecomp_get_function(ctx: ?*Context, index: usize, func: ?*anyopaque)
 }
 
 export fn vbdecomp_disassemble(ctx: ?*Context, address: u32, count: usize) ?[*:0]u8 {
-    _ = ctx;
-    _ = address;
-    _ = count;
-    return null; // TODO: Implement disassembler
+    const c = ctx orelse return null;
+    
+    // Find the section containing this address
+    const rva = address - c.pe_file.getImageBase();
+    const section_data = c.pe_file.rvaToData(rva, 0x1000) orelse return null;
+    
+    // Create disassembler
+    var disassembler = disasm.Disassembler.init(allocator, section_data, address);
+    
+    // Disassemble instructions
+    const options = disasm.DisassemblerOptions{
+        .start_address = address,
+        .end_address = address + @as(u32, @intCast(@min(section_data.len, 0x1000))),
+        .max_instructions = if (count == 0) 0 else count,
+    };
+    
+    const instructions = disassembler.disassemble(options) catch return null;
+    defer disassembler.freeInstructions(instructions);
+    
+    // Format instructions to string
+    var result: std.ArrayList(u8) = .{ .items = &.{}, .capacity = 0 };
+    defer result.deinit(allocator);
+    
+    for (instructions) |inst| {
+        const formatted = inst.formatAlloc(allocator) catch continue;
+        defer allocator.free(formatted);
+        
+        const line = std.fmt.allocPrint(allocator, "{X:0>8}: {s}\n", .{ inst.address, formatted }) catch continue;
+        defer allocator.free(line);
+        
+        result.appendSlice(allocator, line) catch continue;
+    }
+    
+    // Null-terminate and return
+    result.append(allocator, 0) catch return null;
+    const owned = result.toOwnedSlice(allocator) catch return null;
+    return @ptrCast(owned.ptr);
 }
 
 export fn vbdecomp_decompile(ctx: ?*Context, address: u32) ?[*:0]u8 {
