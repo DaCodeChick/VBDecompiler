@@ -34,6 +34,9 @@ try list.append(allocator, value);
 
 // Access
 for (list.items) |item| { ... }
+
+// Pop (returns optional!)
+const item = list.pop() orelse unreachable;  // or use if/while
 ```
 
 #### ❌ WRONG Usage (Will Not Compile)
@@ -50,7 +53,16 @@ defer list.deinit();
 
 // DON'T DO THIS - missing allocator in append
 try list.append(value);
+
+// DON'T DO THIS - pop() returns optional!
+const item = list.pop();  // Type error if you expect non-optional
 ```
+
+#### Important Details
+
+- **`pop()` returns `?T`** (optional) in Zig 0.16, even for unmanaged ArrayList
+- Always unwrap with `orelse`, `.?`, or `if` statement
+- Use `while (list.items.len > 0)` check, then `list.pop() orelse unreachable` is safe
 
 #### Migration Pattern
 
