@@ -9,6 +9,10 @@ const CFGBuilder = @import("analysis/cfg_builder.zig").CFGBuilder;
 const cfg_export = @import("analysis/cfg_export.zig");
 const PCodeBuilder = @import("ir/pcode_function.zig").PCodeBuilder;
 const pcode_printer = @import("ir/pcode_printer.zig");
+const ReachingDefsAnalyzer = @import("analysis/reaching_defs.zig").ReachingDefsAnalyzer;
+const LivenessAnalyzer = @import("analysis/liveness.zig").LivenessAnalyzer;
+const DominatorTreeBuilder = @import("analysis/dominators.zig").DominatorTreeBuilder;
+const dataflow_printer = @import("analysis/dataflow_printer.zig");
 
 const c = @cImport({
     @cInclude("stdio.h");
@@ -23,6 +27,7 @@ const Command = enum {
     blocks,
     dot,
     pcode,
+    dataflow,
     help,
 };
 
@@ -38,6 +43,7 @@ fn printUsage() void {
     _ = c.printf("  blocks <file> <address>     - List basic blocks in function (hex)\n");
     _ = c.printf("  dot <file> <address> [out]  - Export CFG to DOT format (Graphviz)\n");
     _ = c.printf("  pcode <file> <address>      - Generate P-code IR for function\n");
+    _ = c.printf("  dataflow <file> <address>   - Perform data flow analysis on function\n");
     _ = c.printf("  help                        - Show this help\n\n");
     _ = c.printf("Examples:\n");
     _ = c.printf("  vbdecomp analyze app.exe\n");
@@ -48,6 +54,7 @@ fn printUsage() void {
     _ = c.printf("  vbdecomp blocks app.exe 0x401000\n");
     _ = c.printf("  vbdecomp dot app.exe 0x401000 cfg.dot\n");
     _ = c.printf("  vbdecomp pcode app.exe 0x401000\n");
+    _ = c.printf("  vbdecomp dataflow app.exe 0x401000\n");
 }
 
 fn parseCommand(arg: []const u8) ?Command {
@@ -59,6 +66,7 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "blocks")) return .blocks;
     if (std.mem.eql(u8, arg, "dot")) return .dot;
     if (std.mem.eql(u8, arg, "pcode")) return .pcode;
+    if (std.mem.eql(u8, arg, "dataflow")) return .dataflow;
     if (std.mem.eql(u8, arg, "help")) return .help;
     return null;
 }
@@ -472,6 +480,93 @@ fn cmdPCode(allocator: std.mem.Allocator, path: []const u8, address_str: []const
     _ = c.printf("\n");
 }
 
+fn cmdDataFlow(allocator: std.mem.Allocator, path: []const u8, address_str: []const u8) !void {
+    const address = try std.fmt.parseInt(u32, address_str, 0);
+    
+    const pe_file = try pe.parseFromFile(allocator, path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    const image_base = pe_file.getImageBase();
+    const rva = address - image_base;
+    
+    // Get code section
+    const section_data = pe_file.rvaToData(rva, 0x10000) orelse {
+        _ = c.printf("Error: Address 0x%08X is not mapped in any section\n", address);
+        return error.InvalidAddress;
+    };
+    
+    // Disassemble to get instructions
+    var disassembler = disasm.Disassembler.init(allocator, section_data, address);
+    
+    const instructions = try disassembler.disassemble(.{
+        .start_address = address,
+        .end_address = address + @as(u32, @intCast(@min(section_data.len, 0x10000))),
+        .max_instructions = 100,
+    });
+    defer allocator.free(instructions);
+    
+    // Build CFG
+    var cfg = CFG.init(allocator);
+    defer cfg.deinit();
+    
+    var cfg_builder = CFGBuilder.init(allocator, &cfg, section_data, address, .{});
+    defer cfg_builder.deinit();
+    
+    try cfg_builder.buildFunction(address);
+    
+    // Build P-code representation
+    var pcode_builder = PCodeBuilder.init(allocator);
+    defer pcode_builder.deinit();
+    
+    var pcode_func = try pcode_builder.buildFunction(&cfg, address, instructions);
+    defer pcode_func.deinit();
+    
+    _ = c.printf("\n=== Data Flow Analysis ===\n\n");
+    
+    // Perform reaching definitions analysis
+    var reach_analyzer = ReachingDefsAnalyzer.init(allocator, &cfg, &pcode_func);
+    var reach_analysis = try reach_analyzer.analyze();
+    defer reach_analysis.deinit();
+    
+    // Perform liveness analysis
+    var live_analyzer = LivenessAnalyzer.init(allocator, &cfg, &pcode_func);
+    var live_analysis = try live_analyzer.analyze();
+    defer live_analysis.deinit();
+    
+    // Build dominator tree
+    var dom_builder = DominatorTreeBuilder.init(allocator, &cfg, address);
+    var dom_tree = try dom_builder.build();
+    defer dom_tree.deinit();
+    
+    var dom_frontier = try dom_builder.buildDominanceFrontier(&dom_tree);
+    defer dom_frontier.deinit();
+    
+    // Print results
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    const io = threaded.io();
+    
+    const stdout_file = std.Io.File.stdout();
+    var write_buffer: [8192]u8 = undefined;
+    var writer = stdout_file.writer(io, &write_buffer);
+    
+    const printer = dataflow_printer.DataFlowPrinter.init(allocator, .{
+        .color = true,
+        .show_reaching_defs = true,
+        .show_liveness = true,
+        .show_dominators = true,
+        .show_use_def_chains = true,
+    });
+    
+    try printer.printAll(&writer.interface, &reach_analysis, &live_analysis, &dom_tree, &dom_frontier, &pcode_func);
+    try writer.flush();
+    
+    _ = c.printf("\n");
+}
+
 // Conditionally export main only when building an executable
 pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
     // Setup arena allocator
@@ -586,6 +681,16 @@ pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
                 return 1;
             }
             cmdPCode(allocator, args[2], args[3]) catch |err| {
+                _ = c.printf("Error: %s\n", @errorName(err).ptr);
+                return 1;
+            };
+        },
+        .dataflow => {
+            if (args.len < 4) {
+                _ = c.printf("Error: dataflow command requires a file path and address\n");
+                return 1;
+            }
+            cmdDataFlow(allocator, args[2], args[3]) catch |err| {
                 _ = c.printf("Error: %s\n", @errorName(err).ptr);
                 return 1;
             };
