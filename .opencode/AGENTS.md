@@ -100,44 +100,35 @@ const stdout_file = std.Io.File.stdout();
 var write_buffer: [8192]u8 = undefined;
 var writer = stdout_file.writer(io, &write_buffer);
 
-try writer.write("Hello\n");
+try writer.interface.print("Hello {s}\n", .{"world"});
 try writer.flush();
 ```
 
 Don't use old `std.fs.File.writer()` pattern.
 
-## Why C FFI is Used
+#### Simpler Pattern for stdout (Zig 0.16+)
 
-The project uses C FFI in two different ways:
+For simple console output, you can use `writeStreamingAll`:
 
-### 1. C API Export (Intended Design) ✅
+```zig
+pub fn main(init: std.process.Init) !void {
+    try std.Io.File.stdout().writeStreamingAll(init.io, "Hello, World!\n");
+}
+```
 
-**Purpose**: Expose Zig functionality to the Qt/C++ GUI frontend
+**Note**: This requires main to use `std.process.Init` signature. Our current implementation uses the C-style `main(argc, argv)` for simplicity, but `std.process.Init` is the idiomatic Zig 0.16 approach.
 
-- File: `core/src/lib.zig` and `bindings/include/vbdecomp.h`
-- Direction: Zig → C API → Qt/C++ GUI
-- Functions: `vbdecomp_open()`, `vbdecomp_analyze()`, etc.
-- **This is correct and essential** for the architecture
+## C FFI Status
 
-### 2. C stdlib Import (Design Choice) ⚠️
+### ~~2. C stdlib Import (Design Choice)~~ ❌ REMOVED
 
-**Purpose**: Cross-platform file I/O and console output
+**Previous Status**: The CLI and parser used C stdlib for I/O (`c.printf`, `c.fopen`, etc.)
 
-- Files: `core/src/main.zig`, `core/src/pe/parser.zig`
-- Direction: Zig ← C stdlib (`stdio.h`, `stdlib.h`)
-- Usage: `c.printf()`, `c.fopen()`, `c.fread()`, `c.fclose()`
-- **Rationale** (from `docs/architecture.md`):
-  - "Uses C standard library for maximum portability"
-  - "No platform-specific file APIs (no POSIX open/read, no Windows CreateFile)"
-
-**Note**: This is arguably unnecessary since:
-- Zig's `std.fs` and `std.io` already provide cross-platform abstractions
-- `std.debug.print()` works on all platforms
-- We already use `std.Io` interface in newer code (dataflow printer, etc.)
-
-**Recommendation for New Code**:
-- Prefer Zig stdlib (`std.fs`, `std.io`, `std.debug.print`) over C imports
-- The C imports are a legacy design choice that can be gradually replaced
+**Current Status**: **ALL C stdlib imports have been removed** as of commit `487dc86`
+- Replaced `c.printf()` with custom `print()` helper using `std.Io`
+- Replaced `c.fopen()/fread()/fclose()` with `std.Io.Dir` and `std.Io.File` APIs
+- All format strings converted from C (`%s`, `%d`, `%X`) to Zig (`{s}`, `{}`, `{X}`)
+- **Zero C FFI dependencies** in core codebase (except for intended C API export)
 - Only use C API export (`lib.zig`) for the Qt GUI interface
 
 ## Project Structure
