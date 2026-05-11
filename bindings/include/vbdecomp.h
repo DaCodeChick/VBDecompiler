@@ -182,6 +182,15 @@ bool vbdecomp_get_function(vbdecomp_context_t* ctx, size_t index, vbdecomp_funct
 /* Disassemble at address (returns allocated string, caller must free) */
 char* vbdecomp_disassemble(vbdecomp_context_t* ctx, uint32_t address, size_t count);
 
+/* Analyze function and build CFG starting at address */
+bool vbdecomp_analyze_function(vbdecomp_context_t* ctx, uint32_t address);
+
+/* Get cross-references to an address (returns count, fills buffer if provided) */
+size_t vbdecomp_get_xrefs_to(vbdecomp_context_t* ctx, uint32_t address, uint32_t* buffer, size_t buffer_size);
+
+/* Get cross-references from an address (returns count, fills buffer if provided) */
+size_t vbdecomp_get_xrefs_from(vbdecomp_context_t* ctx, uint32_t address, uint32_t* buffer, size_t buffer_size);
+
 /* Decompile function at address (returns allocated string, caller must free) */
 char* vbdecomp_decompile(vbdecomp_context_t* ctx, uint32_t address);
 

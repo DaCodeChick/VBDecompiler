@@ -5,6 +5,8 @@ const vb6 = @import("vb6/detector.zig");
 const vb_structures = @import("vb6/structures.zig");
 const disasm = @import("disasm/disassembler.zig");
 const Instruction = @import("disasm/instruction.zig").Instruction;
+const CFG = @import("analysis/cfg.zig").CFG;
+const CFGBuilder = @import("analysis/cfg_builder.zig").CFGBuilder;
 
 // C API types match header definitions
 const BinaryType = enum(c_int) {
@@ -32,10 +34,15 @@ pub const Context = struct {
     pe_file: pe.PEFile,
     detection_result: vb6.DetectionResult,
     last_error: ?[]const u8,
+    cfg: ?CFG,
     
     pub fn deinit(self: *Context) void {
         if (self.last_error) |err| {
             self.allocator.free(err);
+        }
+        if (self.cfg) |*cfg_val| {
+            var cfg_mut = cfg_val.*;
+            cfg_mut.deinit();
         }
         self.allocator.free(self.pe_file.data);
         self.pe_file.deinit();
@@ -87,6 +94,7 @@ export fn vbdecomp_open(path: [*:0]const u8) ?*Context {
         .pe_file = pe_file,
         .detection_result = detection_result,
         .last_error = null,
+        .cfg = null,
     };
     
     return ctx;
@@ -119,6 +127,7 @@ export fn vbdecomp_open_memory(data: [*]const u8, size: usize) ?*Context {
         .pe_file = pe_file,
         .detection_result = detection_result,
         .last_error = null,
+        .cfg = null,
     };
     
     return ctx;
@@ -319,6 +328,62 @@ export fn vbdecomp_disassemble(ctx: ?*Context, address: u32, count: usize) ?[*:0
     result.append(allocator, 0) catch return null;
     const owned = result.toOwnedSlice(allocator) catch return null;
     return @ptrCast(owned.ptr);
+}
+
+export fn vbdecomp_analyze_function(ctx: ?*Context, address: u32) bool {
+    const c = ctx orelse return false;
+    
+    // Get code section
+    const image_base = c.pe_file.getImageBase();
+    const rva = address - image_base;
+    const section_data = c.pe_file.rvaToData(rva, 0x10000) orelse return false;
+    
+    // Initialize CFG if needed
+    if (c.cfg == null) {
+        c.cfg = CFG.init(allocator);
+    }
+    
+    // Build CFG for this function
+    var builder = CFGBuilder.init(allocator, &c.cfg.?, section_data, address, .{});
+    defer builder.deinit();
+    
+    builder.buildFunction(address) catch return false;
+    
+    return true;
+}
+
+export fn vbdecomp_get_xrefs_to(ctx: ?*Context, address: u32, buffer: ?[*]u32, buffer_size: usize) usize {
+    const c = ctx orelse return 0;
+    const cfg = c.cfg orelse return 0;
+    
+    const xrefs = cfg.getXRefsTo(address, allocator) catch return 0;
+    defer allocator.free(xrefs);
+    
+    if (buffer) |buf| {
+        const count = @min(xrefs.len, buffer_size);
+        for (xrefs[0..count], 0..) |xref, i| {
+            buf[i] = xref.from;
+        }
+    }
+    
+    return xrefs.len;
+}
+
+export fn vbdecomp_get_xrefs_from(ctx: ?*Context, address: u32, buffer: ?[*]u32, buffer_size: usize) usize {
+    const c = ctx orelse return 0;
+    const cfg = c.cfg orelse return 0;
+    
+    const xrefs = cfg.getXRefsFrom(address, allocator) catch return 0;
+    defer allocator.free(xrefs);
+    
+    if (buffer) |buf| {
+        const count = @min(xrefs.len, buffer_size);
+        for (xrefs[0..count], 0..) |xref, i| {
+            buf[i] = xref.to;
+        }
+    }
+    
+    return xrefs.len;
 }
 
 export fn vbdecomp_decompile(ctx: ?*Context, address: u32) ?[*:0]u8 {
