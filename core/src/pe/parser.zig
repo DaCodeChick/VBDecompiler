@@ -207,32 +207,26 @@ fn parseSectionHeader(data: []const u8) !headers.SectionHeader {
 }
 
 pub fn parseFromFile(allocator: std.mem.Allocator, path: []const u8) !PEFile {
-    // Use C standard library for file reading
-    const path_z = try allocator.dupeZ(u8, path);
-    defer allocator.free(path_z);
+    // Use Zig stdlib for file reading
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
     
-    const c = @cImport({
-        @cInclude("stdio.h");
-        @cInclude("stdlib.h");
-    });
-    
-    const file = c.fopen(path_z, "rb") orelse return error.FileNotFound;
-    defer _ = c.fclose(file);
+    const file = try std.Io.Dir.openFile(std.Io.Dir.cwd(), io, path, .{});
+    defer file.close(io);
     
     // Get file size
-    _ = c.fseek(file, 0, c.SEEK_END);
-    const file_size_c = c.ftell(file);
-    _ = c.fseek(file, 0, c.SEEK_SET);
-    
-    if (file_size_c < 0) return error.AccessDenied;
-    const file_size: usize = @intCast(file_size_c);
+    const stat = try file.stat(io);
+    const file_size = stat.size;
     
     // Read file
     const data = try allocator.alloc(u8, file_size);
     errdefer allocator.free(data);
     
-    const bytes_read = c.fread(data.ptr, 1, file_size, file);
-    if (bytes_read != file_size) return error.AccessDenied;
+    // Read entire file from beginning
+    var slice = [_][]u8{data};
+    const bytes_read = try file.readPositional(io, &slice, 0);
+    if (bytes_read != file_size) return error.UnexpectedEof;
 
     return try PEFile.init(allocator, data);
 }
