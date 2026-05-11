@@ -1,3 +1,56 @@
-.zig-cache/
+# Zig
+zig-cache/
 zig-out/
+.zig-cache/
+
+# CMake
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.cmake
+!CMakeLists.txt
+
+# C/C++
 *.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.obj
+*.lib
+*.exp
+*.pdb
+*.ilk
+
+# Qt
+*.pro.user
+*.autosave
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.qm
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+/core/zig-out/
+/gui/build/
+*.log
+
+# Test files
+/core/tests/samples/*.exe
+/core/tests/samples/*.dll
+/core/tests/samples/*.ocx
+!.gitkeep
