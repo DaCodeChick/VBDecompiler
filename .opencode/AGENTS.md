@@ -285,23 +285,25 @@ git commit -m "Phase N: Description
 - ✅ Phase 8: High-level Code Generation (Decompiler)
 - ✅ Phase 9: SQLite Project Database
 - ✅ Phase 10: VB6-Specific Features (Runtime, Forms, Strings, COM)
+- ✅ Phase 11: VB6 P-code Bytecode Support
 
 ## Next Steps (TODO)
 
 1. **GUI Development**: Qt-based frontend using the C API
-2. **P-code Bytecode**: Support VB6 P-code interpreter (for P-code-compiled binaries)
-3. **Enhanced VB6 Analysis**: Event handler mapping, resource extraction improvements
-4. **Testing**: Add comprehensive unit tests for all modules
-5. **Documentation**: User guide, API reference, and GUI usage docs
+2. **Enhanced VB6 Analysis**: Event handler mapping, resource extraction improvements, full form parsing
+3. **Testing**: Add comprehensive unit tests for all modules
+4. **Documentation**: User guide, API reference, and GUI usage docs
+5. **Performance**: Optimize P-code translation and decompilation
 
 ## Known Issues / Limitations
 
-- Currently targets native code only (P-code bytecode TODO)
 - VB6 runtime/COM analysis is simplified (scans binary data, not full PE import parsing)
 - No GUI yet (CLI only)
 - Decompiler output quality needs refinement with actual VB6 binaries
 - SQLite linking requires `libsqlite3-dev` package
 - Form parsing and event mapping are stubs (TODO: implement full parsing)
+- P-code function table parsing uses simplified heuristics (may not work for all VB6 versions)
+- P-code bytecode opcodes based on reverse engineering (some opcodes may be incomplete)
 
 ### SQLite Setup
 
@@ -460,12 +462,202 @@ fn hasOLEImports(self: *Self) !bool {
 
 **TODO**: Implement full PE import directory parsing for more accurate analysis.
 
+## Phase 11: VB6 P-code Bytecode Support Details
+
+Phase 11 added full support for analyzing VB6 binaries compiled to P-code (interpreted bytecode):
+
+### What is VB6 P-code?
+
+VB6 offers two compilation modes:
+1. **Native Code**: Compiles to x86 machine code (handled by Phases 1-10)
+2. **P-code**: Compiles to stack-based bytecode interpreted by MSVBVM60.DLL runtime
+
+P-code binaries are smaller and compile faster but run slower than native code.
+
+### Modules Added
+
+#### 1. P-code Opcodes (`core/src/vb6/pcode_opcodes.zig`)
+
+Defines the VB6 P-code instruction set:
+- **Stack operations**: Push/Pop/Dup
+- **Arithmetic**: Add, Sub, Mul, Div, Mod, Neg
+- **Logical**: And, Or, Xor, Not
+- **Comparisons**: Eq, Ne, Lt, Le, Gt, Ge
+- **Control flow**: Jmp, JmpT, JmpF, Call, Ret
+- **Object operations**: GetProp, SetProp, CallMethod
+- **Array operations**: GetElem, SetElem, Redim
+- **Type conversions**: CvtInt, CvtLong, CvtString, etc.
+
+Each instruction has an opcode, optional operand, and length calculation.
+
+**CLI**: Opcodes used internally by disassembler
+
+#### 2. P-code Disassembler (`core/src/vb6/pcode_disasm.zig`)
+
+Decodes VB6 P-code bytecode into readable instructions:
+- Sequential instruction decoding
+- Operand extraction based on type (Imm8/16/32, VarIndex, Offset, etc.)
+- Function-level disassembly (stops at RET)
+- Full segment disassembly
+
+**CLI**: `vbdecomp vbp-disasm <file> [offset]`
+
+#### 3. P-code Parser (`core/src/vb6/pcode_parser.zig`)
+
+Detects and locates P-code in VB6 binaries:
+- Detects MSVBVM60.DLL runtime imports
+- Locates P-code segments (`.vbp` section or embedded in `.data`)
+- Heuristic validation (opcode density check)
+- Function table parsing (extracts function names, offsets, sizes)
+
+**CLI**: `vbdecomp vbp-detect <file>`
+
+#### 4. P-code Translator (`core/src/vb6/pcode_translator.zig`)
+
+Translates VB6 P-code to Ghidra P-code IR:
+- Stack-based execution model → SSA-style varnodes
+- Virtual stack pointer tracking
+- Control flow block creation
+- Opcode mapping to Ghidra P-code operations
+
+**CLI**: `vbdecomp vbp-translate <file> [offset]`
+
+### Technical Implementation Notes
+
+#### Opcode Naming
+
+Ghidra P-code opcodes use lowercase with underscores:
+
+```zig
+// ✅ CORRECT
+.int_add, .int_sub, .copy, .branch, .@"return"
+
+// ❌ WRONG
+.INT_ADD, .COPY, .BRANCH, .return_  // Wrong casing/naming
+```
+
+**Note**: `.@"return"` uses `@""` syntax because `return` is a Zig keyword.
+
+#### PCodeOp Structure
+
+Ghidra P-code uses `input0` and `input1`, not an `inputs` array:
+
+```zig
+pub const PCodeOp = struct {
+    opcode: OpCode,
+    output: ?Varnode,
+    input0: ?Varnode,
+    input1: ?Varnode,
+    seq_num: u64,
+};
+
+// ✅ CORRECT usage
+try ops.append(allocator, pcode.PCodeOp{
+    .opcode = .int_add,
+    .output = result,
+    .input0 = left,
+    .input1 = right,
+    .seq_num = self.nextSeq(),
+});
+```
+
+#### PCodeFunction Blocks
+
+`PCodeFunction.blocks` is a `HashMap(u32, PCodeBlock)`, not an ArrayList:
+
+```zig
+// ✅ CORRECT
+try function.blocks.put(block.address, block);
+
+// Cleanup
+var it = function.blocks.valueIterator();
+while (it.next()) |block| {
+    block.deinit();
+}
+function.blocks.deinit();
+
+// ❌ WRONG
+try function.blocks.append(allocator, block);
+```
+
+#### Greater-Than Comparisons
+
+Ghidra P-code only has less-than operations. Implement greater-than via operand swapping:
+
+```zig
+// For a > b, use b < a
+fn translateBinaryOpSwapped(self: *Self, ops: *ArrayList(PCodeOp), op: OpCode) !void {
+    // Pop operands
+    const left = ...;
+    const right = ...;
+    
+    // Swap for greater-than
+    try ops.append(allocator, PCodeOp{
+        .input0 = right,  // Swapped!
+        .input1 = left,   // Swapped!
+        ...
+    });
+}
+
+// Usage
+.CmpGt => try self.translateBinaryOpSwapped(&ops, .int_sless),  // a > b == b < a
+.CmpGe => try self.translateBinaryOpSwapped(&ops, .int_slessequal),  // a >= b == b <= a
+```
+
+#### Runtime getLength() Issue
+
+Instruction length calculation must return runtime value, not comptime:
+
+```zig
+// ✅ CORRECT
+pub fn getLength(self: *const Instruction) usize {
+    const base: usize = 1;
+    const operand_size: usize = switch (self.operand_type) {
+        .None => 0,
+        .Imm8 => 1,
+        ...
+    };
+    return base + operand_size;
+}
+
+// ❌ WRONG
+pub fn getLength(self: *const Instruction) usize {
+    return 1 + switch (self.operand_type) { ... };  // Comptime error!
+}
+```
+
+### P-code Detection Heuristics
+
+Detection looks for:
+1. **Runtime DLL**: `MSVBVM60.DLL` or `MSVBVM50.DLL` imports
+2. **Section name**: `.vbp` section (dedicated P-code section)
+3. **Opcode density**: 60%+ of bytes in range 0x01-0x90 (valid opcodes)
+
+### CLI Workflow
+
+```bash
+# 1. Detect if binary uses P-code
+vbdecomp vbp-detect app.exe
+
+# 2. Disassemble P-code at offset
+vbdecomp vbp-disasm app.exe 0x1000
+
+# 3. Translate to Ghidra P-code IR (for further analysis)
+vbdecomp vbp-translate app.exe 0x1000
+```
+
+After translation to Ghidra P-code, you can use existing analysis passes:
+- Data-flow analysis (Phase 5)
+- SSA conversion (Phase 6)
+- Type inference (Phase 7)
+- Decompilation (Phase 8)
+
 ## Contact / Feedback
 
 Report issues: https://github.com/anomalyco/opencode
 
 ---
 
-**Last Updated**: Phase 10 completion (VB6-Specific Features)  
+**Last Updated**: Phase 11 completion (VB6 P-code Bytecode Support)  
 **Zig Version**: 0.16.0  
 **Status**: Active development
