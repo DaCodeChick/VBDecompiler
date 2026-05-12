@@ -54,6 +54,9 @@ const Command = enum {
     vb6_info,
     vb6_strings,
     vb6_com,
+    vbp_detect,
+    vbp_disasm,
+    vbp_translate,
     help,
 };
 
@@ -79,6 +82,9 @@ fn printUsage() void {
     print("  vb6-info <file>             - Show VB6 runtime information\n", .{});
     print("  vb6-strings <file>          - Extract VB6 strings (BSTR format)\n", .{});
     print("  vb6-com <file>              - Analyze COM interfaces and GUIDs\n", .{});
+    print("  vbp-detect <file>           - Detect if binary uses VB P-code\n", .{});
+    print("  vbp-disasm <file> [offset]  - Disassemble VB P-code bytecode\n", .{});
+    print("  vbp-translate <file> [off]  - Translate VB P-code to Ghidra P-code IR\n", .{});
     print("  help                        - Show this help\n\n", .{});
     print("Examples:\n", .{});
     print("  vbdecomp analyze app.exe\n", .{});
@@ -98,6 +104,9 @@ fn printUsage() void {
     print("  vbdecomp vb6-info app.exe\n", .{});
     print("  vbdecomp vb6-strings app.exe\n", .{});
     print("  vbdecomp vb6-com app.exe\n", .{});
+    print("  vbdecomp vbp-detect app.exe\n", .{});
+    print("  vbdecomp vbp-disasm pcode-app.exe 0x1000\n", .{});
+    print("  vbdecomp vbp-translate pcode-app.exe 0x1000\n", .{});
 }
 
 fn parseCommand(arg: []const u8) ?Command {
@@ -119,6 +128,9 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "vb6-info")) return .vb6_info;
     if (std.mem.eql(u8, arg, "vb6-strings")) return .vb6_strings;
     if (std.mem.eql(u8, arg, "vb6-com")) return .vb6_com;
+    if (std.mem.eql(u8, arg, "vbp-detect")) return .vbp_detect;
+    if (std.mem.eql(u8, arg, "vbp-disasm")) return .vbp_disasm;
+    if (std.mem.eql(u8, arg, "vbp-translate")) return .vbp_translate;
     if (std.mem.eql(u8, arg, "help")) return .help;
     return null;
 }
@@ -1176,6 +1188,206 @@ fn cmdVB6COM(allocator: std.mem.Allocator, path: []const u8) !void {
     }
 }
 
+fn cmdVBPDetect(allocator: std.mem.Allocator, path: []const u8) !void {
+    const PCodeParser = @import("vb6/pcode_parser.zig").PCodeParser;
+    
+    print("VB P-code Detection\n", .{});
+    print("===================\n\n", .{});
+    
+    const pe_file = try pe.parseFromFile(allocator, path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    var parser = PCodeParser.init(allocator, &pe_file);
+    
+    if (parser.isPCode()) {
+        print("✓ This binary uses VB P-code (interpreted bytecode)\n\n", .{});
+        
+        // Find P-code segment
+        if (parser.findPCodeSegment()) |segment| {
+            print("P-code Segment Found:\n", .{});
+            print("  RVA: 0x{X:0>8}\n", .{segment.rva});
+            print("  Size: {d} bytes\n", .{segment.size});
+            print("  Location: {s}\n\n", .{if (segment.is_startup) "Startup code" else "Main code"});
+            
+            // Try to parse function table
+            var functions = try parser.parseFunctionTable(&segment);
+            defer {
+                for (functions.items) |*func| {
+                    func.deinit(allocator);
+                }
+                functions.deinit(allocator);
+            }
+            
+            if (functions.items.len > 0) {
+                print("Found {d} P-code functions:\n", .{functions.items.len});
+                for (functions.items[0..@min(functions.items.len, 10)]) |func| {
+                    print("  {s} at offset 0x{X:0>8} ({d} bytes)\n", .{ func.name, func.offset, func.size });
+                }
+                if (functions.items.len > 10) {
+                    print("  ... and {d} more functions\n", .{functions.items.len - 10});
+                }
+            } else {
+                print("Note: Could not parse function table (may use different format)\n", .{});
+            }
+        }
+    } else {
+        print("✗ This binary uses native code (not P-code)\n", .{});
+        print("Use the standard disasm/cfg/decompile commands for native code analysis.\n", .{});
+    }
+}
+
+fn cmdVBPDisasm(allocator: std.mem.Allocator, path: []const u8, offset_arg: ?[]const u8) !void {
+    const PCodeParser = @import("vb6/pcode_parser.zig").PCodeParser;
+    const PCodeDisassembler = @import("vb6/pcode_disasm.zig").PCodeDisassembler;
+    
+    print("VB P-code Disassembly\n", .{});
+    print("=====================\n\n", .{});
+    
+    const pe_file = try pe.parseFromFile(allocator, path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    var parser = PCodeParser.init(allocator, &pe_file);
+    
+    if (!parser.isPCode()) {
+        print("Error: Binary does not appear to use VB P-code\n", .{});
+        return;
+    }
+    
+    const segment = parser.findPCodeSegment() orelse {
+        print("Error: Could not locate P-code segment\n", .{});
+        return;
+    };
+    
+    // Parse offset if provided
+    const start_offset: usize = if (offset_arg) |arg| blk: {
+        break :blk std.fmt.parseInt(usize, if (std.mem.startsWith(u8, arg, "0x"))
+            arg[2..]
+        else
+            arg, 16) catch {
+            print("Error: Invalid offset '{s}'\n", .{arg});
+            return error.InvalidOffset;
+        };
+    } else 0;
+    
+    print("Disassembling from offset 0x{X:0>8}...\n\n", .{start_offset});
+    
+    var disassembler = PCodeDisassembler.init(allocator, segment.data);
+    
+    var instructions = if (start_offset > 0)
+        try disassembler.disassembleFunction(start_offset, 100)
+    else
+        try disassembler.disassembleAll();
+    
+    defer {
+        for (instructions.items) |*instr| {
+            _ = instr;
+        }
+        instructions.deinit(allocator);
+    }
+    
+    print("Disassembled {d} instructions:\n\n", .{instructions.items.len});
+    
+    // Print instructions
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    
+    const stdout_file = std.Io.File.stdout();
+    var write_buffer: [8192]u8 = undefined;
+    var writer = stdout_file.writer(io, &write_buffer);
+    
+    const pcode_disasm = @import("vb6/pcode_disasm.zig");
+    try pcode_disasm.printInstructions(allocator, instructions.items, &writer.interface);
+    try writer.flush();
+}
+
+fn cmdVBPTranslate(allocator: std.mem.Allocator, path: []const u8, offset_arg: ?[]const u8) !void {
+    const PCodeParser = @import("vb6/pcode_parser.zig").PCodeParser;
+    const PCodeDisassembler = @import("vb6/pcode_disasm.zig").PCodeDisassembler;
+    const VBPCodeTranslator = @import("vb6/pcode_translator.zig").VBPCodeTranslator;
+    
+    print("VB P-code to Ghidra P-code Translation\n", .{});
+    print("======================================\n\n", .{});
+    
+    const pe_file = try pe.parseFromFile(allocator, path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    var parser = PCodeParser.init(allocator, &pe_file);
+    
+    if (!parser.isPCode()) {
+        print("Error: Binary does not appear to use VB P-code\n", .{});
+        return;
+    }
+    
+    const segment = parser.findPCodeSegment() orelse {
+        print("Error: Could not locate P-code segment\n", .{});
+        return;
+    };
+    
+    // Parse offset if provided
+    const start_offset: usize = if (offset_arg) |arg| blk: {
+        break :blk std.fmt.parseInt(usize, if (std.mem.startsWith(u8, arg, "0x"))
+            arg[2..]
+        else
+            arg, 16) catch {
+            print("Error: Invalid offset '{s}'\n", .{arg});
+            return error.InvalidOffset;
+        };
+    } else 0;
+    
+    print("Translating from offset 0x{X:0>8}...\n\n", .{start_offset});
+    
+    // Disassemble VB P-code
+    var disassembler = PCodeDisassembler.init(allocator, segment.data);
+    var vb_instructions = try disassembler.disassembleFunction(start_offset, 100);
+    defer {
+        for (vb_instructions.items) |*instr| {
+            _ = instr;
+        }
+        vb_instructions.deinit(allocator);
+    }
+    
+    print("Disassembled {d} VB P-code instructions\n", .{vb_instructions.items.len});
+    
+    // Translate to Ghidra P-code
+    var translator = VBPCodeTranslator.init(allocator);
+    var ghidra_function = try translator.translate(vb_instructions.items);
+    defer {
+        var it = ghidra_function.blocks.valueIterator();
+        while (it.next()) |block| {
+            block.deinit();
+        }
+        ghidra_function.blocks.deinit();
+    }
+    
+    print("Translated to {d} P-code blocks\n\n", .{ghidra_function.blocks.count()});
+    
+    // Print Ghidra P-code
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+    
+    const stdout_file = std.Io.File.stdout();
+    var write_buffer: [8192]u8 = undefined;
+    var writer = stdout_file.writer(io, &write_buffer);
+    
+    try pcode_printer.printFunction(allocator, &writer.interface, &ghidra_function);
+    try writer.flush();
+}
+
+
 // Conditionally export main only when building an executable
 pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
     // Setup arena allocator
@@ -1390,6 +1602,38 @@ pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
                 return 1;
             }
             cmdVB6COM(allocator, args[2]) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .vbp_detect => {
+            if (args.len < 3) {
+                print("Error: vbp-detect command requires a file path\n", .{});
+                return 1;
+            }
+            cmdVBPDetect(allocator, args[2]) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .vbp_disasm => {
+            if (args.len < 3) {
+                print("Error: vbp-disasm command requires a file path\n", .{});
+                return 1;
+            }
+            const offset_arg = if (args.len >= 4) args[3] else null;
+            cmdVBPDisasm(allocator, args[2], offset_arg) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .vbp_translate => {
+            if (args.len < 3) {
+                print("Error: vbp-translate command requires a file path\n", .{});
+                return 1;
+            }
+            const offset_arg = if (args.len >= 4) args[3] else null;
+            cmdVBPTranslate(allocator, args[2], offset_arg) catch |err| {
                 print("Error: {s}\n", .{@errorName(err)});
                 return 1;
             };
