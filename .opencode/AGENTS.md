@@ -142,8 +142,10 @@ VBDecompiler/
 │   │   ├── pe/                # PE parser
 │   │   ├── vb6/               # VB6 detection
 │   │   ├── disasm/            # x86 disassembler
-│   │   ├── analysis/          # CFG, dominators, dataflow
-│   │   ├── ir/                # P-code IR
+│   │   ├── analysis/          # CFG, dominators, dataflow, type inference
+│   │   ├── ir/                # P-code IR, SSA
+│   │   ├── decompiler/        # High-level code generation
+│   │   ├── db/                # SQLite project database
 │   │   └── utils/             # Errors, logging
 │   └── build.zig              # Zig build config
 ├── bindings/
@@ -211,6 +213,12 @@ Available commands:
 - `dot <file> <addr> [out]` - Export CFG to DOT
 - `pcode <file> <addr>` - Generate P-code IR
 - `dataflow <file> <addr>` - Data flow analysis
+- `ssa <file> <addr>` - Convert to SSA form
+- `types <file> <addr>` - Infer VB6 types
+- `decompile <file> <addr>` - Decompile to VB6 code
+- `project-create <proj> <bin>` - Create project database
+- `project-open <proj>` - Open project
+- `project-save <proj> <file>` - Save analysis to project
 
 ## Common Tasks
 
@@ -272,22 +280,49 @@ git commit -m "Phase N: Description
 - ✅ Phase 3: Control Flow Analysis
 - ✅ Phase 4: P-code IR
 - ✅ Phase 5: Data Flow Analysis
+- ✅ Phase 6: SSA Conversion
+- ✅ Phase 7: Type Inference
+- ✅ Phase 8: High-level Code Generation (Decompiler)
+- ✅ Phase 9: SQLite Project Database
 
 ## Next Steps (TODO)
 
-1. **SSA Conversion**: Phi node insertion using dominator tree
-2. **Type Inference**: Recover types from P-code operations
-3. **Expression Reconstruction**: Build high-level expressions
-4. **VB6 Specifics**: Forms, controls, events, COM
-5. **GUI**: Qt-based frontend
-6. **Database**: SQLite for project persistence
+1. **GUI Development**: Qt-based frontend
+2. **VB6 Specifics**: Forms, controls, events, COM
+3. **P-code Bytecode**: Support VB6 P-code interpreter
+4. **Testing**: Add comprehensive unit tests
+5. **Documentation**: User guide and API reference
 
 ## Known Issues / Limitations
 
 - Currently targets native code only (P-code bytecode TODO)
 - No VB6 runtime library analysis yet
 - No GUI yet (CLI only)
-- No project save/load (planned SQLite DB)
+- Decompiler output quality needs refinement
+- SQLite linking requires `libsqlite3-dev` package
+
+### SQLite Setup
+
+The project requires SQLite3 development libraries:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install libsqlite3-dev
+
+# Fedora/RHEL
+sudo dnf install sqlite-devel
+
+# macOS
+brew install sqlite3
+
+# Windows (MSYS2)
+pacman -S mingw-w64-x86_64-sqlite3
+```
+
+Build system links with `-lsqlite3` via:
+```zig
+exe.root_module.linkSystemLibrary("sqlite3", .{});
+```
 
 ## Debugging Tips
 
@@ -320,6 +355,6 @@ Report issues: https://github.com/anomalyco/opencode
 
 ---
 
-**Last Updated**: Phase 5 completion (Data Flow Analysis)  
+**Last Updated**: Phase 9 completion (SQLite Project Database)  
 **Zig Version**: 0.16.0  
 **Status**: Active development
