@@ -1,0 +1,457 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1280</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>VBDecompiler</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QSplitter" name="mainSplitter">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <widget class="QWidget" name="leftPanel">
+       <layout class="QVBoxLayout" name="leftLayout">
+        <item>
+         <widget class="QTabWidget" name="leftTabs">
+          <property name="currentIndex">
+           <number>0</number>
+          </property>
+          <widget class="QWidget" name="functionsTab">
+           <attribute name="title">
+            <string>Functions</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="functionsLayout">
+            <item>
+             <widget class="QLineEdit" name="functionFilter">
+              <property name="placeholderText">
+               <string>Filter functions...</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QTreeWidget" name="functionList">
+              <column>
+               <property name="text">
+                <string>Address</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Name</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Size</string>
+               </property>
+              </column>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="sectionsTab">
+           <attribute name="title">
+            <string>Sections</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="sectionsLayout">
+            <item>
+             <widget class="QTreeWidget" name="sectionsList">
+              <column>
+               <property name="text">
+                <string>Name</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Virtual Address</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Size</string>
+               </property>
+              </column>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="stringsTab">
+           <attribute name="title">
+            <string>Strings</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="stringsLayout">
+            <item>
+             <widget class="QLineEdit" name="stringFilter">
+              <property name="placeholderText">
+               <string>Filter strings...</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QListWidget" name="stringsList"/>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="centerPanel">
+       <layout class="QVBoxLayout" name="centerLayout">
+        <item>
+         <widget class="QTabWidget" name="centerTabs">
+          <property name="currentIndex">
+           <number>0</number>
+          </property>
+          <widget class="QWidget" name="disassemblyTab">
+           <attribute name="title">
+            <string>Disassembly</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="disasmLayout">
+            <item>
+             <widget class="QTextEdit" name="disassemblyView">
+              <property name="font">
+               <font>
+                <family>Courier New</family>
+                <pointsize>10</pointsize>
+               </font>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="hexTab">
+           <attribute name="title">
+            <string>Hex View</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="hexLayout">
+            <item>
+             <widget class="QTextEdit" name="hexView">
+              <property name="font">
+               <font>
+                <family>Courier New</family>
+                <pointsize>10</pointsize>
+               </font>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="graphTab">
+           <attribute name="title">
+            <string>Graph</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="graphLayout">
+            <item>
+             <widget class="QGraphicsView" name="cfgGraphView"/>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="rightPanel">
+       <layout class="QVBoxLayout" name="rightLayout">
+        <item>
+         <widget class="QTabWidget" name="rightTabs">
+          <property name="currentIndex">
+           <number>0</number>
+          </property>
+          <widget class="QWidget" name="decompilerTab">
+           <attribute name="title">
+            <string>Decompiler</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="decompilerLayout">
+            <item>
+             <widget class="QTextEdit" name="decompilerView">
+              <property name="font">
+               <font>
+                <family>Courier New</family>
+                <pointsize>10</pointsize>
+               </font>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="pcodeTab">
+           <attribute name="title">
+            <string>P-code IR</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="pcodeLayout">
+            <item>
+             <widget class="QTextEdit" name="pcodeView">
+              <property name="font">
+               <font>
+                <family>Courier New</family>
+                <pointsize>10</pointsize>
+               </font>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="xrefsTab">
+           <attribute name="title">
+            <string>Cross-Refs</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="xrefsLayout">
+            <item>
+             <widget class="QTreeWidget" name="xrefsList">
+              <column>
+               <property name="text">
+                <string>From</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>To</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Type</string>
+               </property>
+              </column>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="infoTab">
+           <attribute name="title">
+            <string>Binary Info</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="infoLayout">
+            <item>
+             <widget class="QTextEdit" name="binaryInfoView">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1280</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionOpen"/>
+    <addaction name="actionClose"/>
+    <addaction name="separator"/>
+    <addaction name="actionSaveProject"/>
+    <addaction name="actionLoadProject"/>
+    <addaction name="separator"/>
+    <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuAnalysis">
+    <property name="title">
+     <string>Analysis</string>
+    </property>
+    <addaction name="actionAnalyze"/>
+    <addaction name="actionDecompileFunction"/>
+    <addaction name="separator"/>
+    <addaction name="actionFindFunction"/>
+    <addaction name="actionGotoAddress"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <addaction name="actionShowFunctions"/>
+    <addaction name="actionShowStrings"/>
+    <addaction name="actionShowHex"/>
+    <addaction name="actionShowGraph"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title">
+     <string>Help</string>
+    </property>
+    <addaction name="actionAbout"/>
+    <addaction name="actionDocumentation"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuAnalysis"/>
+   <addaction name="menuView"/>
+   <addaction name="menuHelp"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionOpen"/>
+   <addaction name="actionSaveProject"/>
+   <addaction name="separator"/>
+   <addaction name="actionAnalyze"/>
+   <addaction name="actionDecompileFunction"/>
+   <addaction name="separator"/>
+   <addaction name="actionGotoAddress"/>
+  </widget>
+  <action name="actionOpen">
+   <property name="text">
+    <string>Open...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionClose">
+   <property name="text">
+    <string>Close</string>
+   </property>
+  </action>
+  <action name="actionSaveProject">
+   <property name="text">
+    <string>Save Project...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+  </action>
+  <action name="actionLoadProject">
+   <property name="text">
+    <string>Load Project...</string>
+   </property>
+  </action>
+  <action name="actionExit">
+   <property name="text">
+    <string>Exit</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
+   </property>
+  </action>
+  <action name="actionAnalyze">
+   <property name="text">
+    <string>Analyze Binary</string>
+   </property>
+   <property name="shortcut">
+    <string>F5</string>
+   </property>
+  </action>
+  <action name="actionDecompileFunction">
+   <property name="text">
+    <string>Decompile Function</string>
+   </property>
+   <property name="shortcut">
+    <string>F3</string>
+   </property>
+  </action>
+  <action name="actionFindFunction">
+   <property name="text">
+    <string>Find Function...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+F</string>
+   </property>
+  </action>
+  <action name="actionGotoAddress">
+   <property name="text">
+    <string>Go to Address...</string>
+   </property>
+   <property name="shortcut">
+    <string>G</string>
+   </property>
+  </action>
+  <action name="actionShowFunctions">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Functions Panel</string>
+   </property>
+  </action>
+  <action name="actionShowStrings">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Strings Panel</string>
+   </property>
+  </action>
+  <action name="actionShowHex">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Hex View</string>
+   </property>
+  </action>
+  <action name="actionShowGraph">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Control Flow Graph</string>
+   </property>
+  </action>
+  <action name="actionAbout">
+   <property name="text">
+    <string>About VBDecompiler</string>
+   </property>
+  </action>
+  <action name="actionDocumentation">
+   <property name="text">
+    <string>Documentation</string>
+   </property>
+   <property name="shortcut">
+    <string>F1</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
