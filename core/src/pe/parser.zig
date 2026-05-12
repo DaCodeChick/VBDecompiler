@@ -1,6 +1,6 @@
 // PE file parser
 const std = @import("std");
-const headers = @import("headers.zig");
+pub const headers = @import("headers.zig");
 
 pub const PEError = error{
     InvalidDOSSignature,

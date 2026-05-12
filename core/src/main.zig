@@ -51,6 +51,9 @@ const Command = enum {
     project_create,
     project_open,
     project_save,
+    vb6_info,
+    vb6_strings,
+    vb6_com,
     help,
 };
 
@@ -73,6 +76,9 @@ fn printUsage() void {
     print("  project-create <proj> <bin> - Create a new project database\n", .{});
     print("  project-open <proj>         - Open an existing project\n", .{});
     print("  project-save <proj> <file>  - Save analysis results to project\n", .{});
+    print("  vb6-info <file>             - Show VB6 runtime information\n", .{});
+    print("  vb6-strings <file>          - Extract VB6 strings (BSTR format)\n", .{});
+    print("  vb6-com <file>              - Analyze COM interfaces and GUIDs\n", .{});
     print("  help                        - Show this help\n\n", .{});
     print("Examples:\n", .{});
     print("  vbdecomp analyze app.exe\n", .{});
@@ -89,6 +95,9 @@ fn printUsage() void {
     print("  vbdecomp decompile app.exe 0x401000\n", .{});
     print("  vbdecomp project-create myapp.vbdp myapp.exe\n", .{});
     print("  vbdecomp project-save myapp.vbdp myapp.exe\n", .{});
+    print("  vbdecomp vb6-info app.exe\n", .{});
+    print("  vbdecomp vb6-strings app.exe\n", .{});
+    print("  vbdecomp vb6-com app.exe\n", .{});
 }
 
 fn parseCommand(arg: []const u8) ?Command {
@@ -107,6 +116,9 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "project-create")) return .project_create;
     if (std.mem.eql(u8, arg, "project-open")) return .project_open;
     if (std.mem.eql(u8, arg, "project-save")) return .project_save;
+    if (std.mem.eql(u8, arg, "vb6-info")) return .vb6_info;
+    if (std.mem.eql(u8, arg, "vb6-strings")) return .vb6_strings;
+    if (std.mem.eql(u8, arg, "vb6-com")) return .vb6_com;
     if (std.mem.eql(u8, arg, "help")) return .help;
     return null;
 }
@@ -986,6 +998,184 @@ fn cmdProjectSave(allocator: std.mem.Allocator, project_path: []const u8, binary
     print("Saved {d} functions and {d} cross-references\n", .{ func_count, xref_count });
 }
 
+fn cmdVB6Info(allocator: std.mem.Allocator, path: []const u8) !void {
+    const RuntimeParser = @import("vb6/runtime_parser.zig").RuntimeParser;
+    
+    print("VB6 Runtime Information Analysis\n", .{});
+    print("================================\n\n", .{});
+    
+    const pe_file = try pe.parseFromFile(allocator, path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    var parser = RuntimeParser.init(allocator, &pe_file);
+    
+    // Find object table
+    const obj_table_rva = parser.findObjectTable();
+    if (obj_table_rva) |rva| {
+        print("VB Object Table found at RVA: 0x{X:0>8}\n", .{rva});
+        
+        const obj_table = try parser.parseObjectTable(rva);
+        print("  Signature: 0x{X:0>8}\n", .{obj_table.signature});
+        print("  Runtime Version: {d}\n", .{obj_table.runtime_version});
+        print("  Runtime DLL Version: {d}\n\n", .{obj_table.runtime_dll_version});
+        
+        // Parse objects
+        if (obj_table.object_table != 0) {
+            print("Parsing VB Objects...\n", .{});
+            var objects = try parser.parseObjects(obj_table.object_table);
+            defer {
+                for (objects.items) |*obj| {
+                    obj.deinit(allocator);
+                }
+                objects.deinit(allocator);
+            }
+            
+            print("Found {d} objects:\n", .{objects.items.len});
+            for (objects.items) |obj| {
+                print("  - {s} (Address: 0x{X:0>8}, Size: {d})\n", .{ obj.name, obj.address, obj.size });
+            }
+        }
+    } else {
+        print("VB Object Table not found\n", .{});
+    }
+    
+    // Get runtime imports
+    print("\nVB Runtime Imports:\n", .{});
+    var imports = try parser.getRuntimeImports();
+    defer {
+        for (imports.items) |*imp| {
+            imp.deinit(allocator);
+        }
+        imports.deinit(allocator);
+    }
+    
+    for (imports.items[0..@min(imports.items.len, 20)]) |imp| {
+        print("  {s}!{s}\n", .{ imp.dll_name, imp.function_name });
+    }
+    
+    if (imports.items.len > 20) {
+        print("  ... and {d} more\n", .{imports.items.len - 20});
+    }
+}
+
+fn cmdVB6Strings(allocator: std.mem.Allocator, path: []const u8) !void {
+    const StringExtractor = @import("vb6/string_extractor.zig").StringExtractor;
+    const calculateStatistics = @import("vb6/string_extractor.zig").calculateStatistics;
+    
+    print("VB6 String Extraction\n", .{});
+    print("====================\n\n", .{});
+    
+    const pe_file = try pe.parseFromFile(allocator, path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    var extractor = StringExtractor.init(allocator, &pe_file);
+    
+    print("Extracting strings...\n", .{});
+    var strings = try extractor.extractAll();
+    defer {
+        for (strings.items) |*str| {
+            str.deinit(allocator);
+        }
+        strings.deinit(allocator);
+    }
+    
+    // Calculate statistics
+    const stats = try calculateStatistics(allocator, strings.items);
+    
+    print("\nStatistics:\n", .{});
+    print("  Total strings: {d}\n", .{stats.total_count});
+    print("  Unique strings: {d}\n", .{stats.unique_count});
+    print("  ASCII strings: {d}\n", .{stats.ascii_count});
+    print("  Unicode strings: {d}\n", .{stats.unicode_count});
+    print("  Average length: {d:.1}\n", .{stats.avg_length});
+    print("  Total bytes: {d}\n\n", .{stats.total_bytes});
+    
+    // Show first 20 strings
+    print("Sample strings:\n", .{});
+    for (strings.items[0..@min(strings.items.len, 20)]) |str| {
+        const preview = if (str.value.len > 60) str.value[0..60] else str.value;
+        print("  [0x{X:0>8}] {s}{s}\n", .{ str.rva, preview, if (str.value.len > 60) "..." else "" });
+    }
+    
+    if (strings.items.len > 20) {
+        print("  ... and {d} more strings\n", .{strings.items.len - 20});
+    }
+}
+
+fn cmdVB6COM(allocator: std.mem.Allocator, path: []const u8) !void {
+    const COMDetector = @import("vb6/com_detector.zig").COMDetector;
+    
+    print("VB6 COM Interface Analysis\n", .{});
+    print("==========================\n\n", .{});
+    
+    const pe_file = try pe.parseFromFile(allocator, path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    var detector = COMDetector.init(allocator, &pe_file);
+    
+    // Detect COM usage
+    const usage_info = try detector.detectCOMUsage();
+    
+    print("COM Usage Summary:\n", .{});
+    print("  Uses COM/OLE: {s}\n", .{if (usage_info.uses_com) "Yes" else "No"});
+    print("  Has Type Library: {s}\n", .{if (usage_info.has_type_lib) "Yes" else "No"});
+    print("  Implements Interfaces: {s}\n", .{if (usage_info.implements_interfaces) "Yes" else "No"});
+    print("  Interface Count: {d}\n", .{usage_info.interface_count});
+    print("  GUID Count: {d}\n\n", .{usage_info.guid_count});
+    
+    // Find GUIDs
+    print("Finding GUIDs...\n", .{});
+    var guids = try detector.findGUIDs();
+    defer {
+        for (guids.items) |*guid_loc| {
+            guid_loc.deinit(allocator);
+        }
+        guids.deinit(allocator);
+    }
+    
+    print("Found {d} GUIDs:\n", .{guids.items.len});
+    for (guids.items[0..@min(guids.items.len, 10)]) |guid_loc| {
+        const guid_str = try guid_loc.guid.format(allocator);
+        defer allocator.free(guid_str);
+        print("  {s} at RVA 0x{X:0>8} ({s})\n", .{ guid_str, guid_loc.rva, guid_loc.section });
+    }
+    
+    if (guids.items.len > 10) {
+        print("  ... and {d} more GUIDs\n", .{guids.items.len - 10});
+    }
+    
+    // Find VTables
+    print("\nFinding COM VTables...\n", .{});
+    var vtables = try detector.findVTables();
+    defer {
+        for (vtables.items) |*vtable| {
+            vtable.deinit(allocator);
+        }
+        vtables.deinit(allocator);
+    }
+    
+    print("Found {d} potential VTables:\n", .{vtables.items.len});
+    for (vtables.items[0..@min(vtables.items.len, 10)]) |vtable| {
+        print("  VTable at RVA 0x{X:0>8} ({d} methods)\n", .{ vtable.rva, vtable.method_count });
+    }
+    
+    if (vtables.items.len > 10) {
+        print("  ... and {d} more VTables\n", .{vtables.items.len - 10});
+    }
+}
+
 // Conditionally export main only when building an executable
 pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
     // Setup arena allocator
@@ -1170,6 +1360,36 @@ pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
                 return 1;
             }
             cmdProjectSave(allocator, args[2], args[3]) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .vb6_info => {
+            if (args.len < 3) {
+                print("Error: vb6-info command requires a file path\n", .{});
+                return 1;
+            }
+            cmdVB6Info(allocator, args[2]) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .vb6_strings => {
+            if (args.len < 3) {
+                print("Error: vb6-strings command requires a file path\n", .{});
+                return 1;
+            }
+            cmdVB6Strings(allocator, args[2]) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .vb6_com => {
+            if (args.len < 3) {
+                print("Error: vb6-com command requires a file path\n", .{});
+                return 1;
+            }
+            cmdVB6COM(allocator, args[2]) catch |err| {
                 print("Error: {s}\n", .{@errorName(err)});
                 return 1;
             };
