@@ -20,6 +20,9 @@ pub fn build(b: *std.Build) void {
         .version = .{ .major = 0, .minor = 1, .patch = 0 },
     });
     
+    // Link SQLite3
+    lib.root_module.linkSystemLibrary("sqlite3", .{});
+    
     b.installArtifact(lib);
 
     // Create module for executable
@@ -35,6 +38,9 @@ pub fn build(b: *std.Build) void {
         .name = "vbdecomp",
         .root_module = exe_module,
     });
+    
+    // Link SQLite3
+    exe.root_module.linkSystemLibrary("sqlite3", .{});
     
     b.installArtifact(exe);
 

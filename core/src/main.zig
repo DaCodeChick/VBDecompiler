@@ -48,6 +48,9 @@ const Command = enum {
     ssa,
     types,
     decompile,
+    project_create,
+    project_open,
+    project_save,
     help,
 };
 
@@ -67,6 +70,9 @@ fn printUsage() void {
     print("  ssa <file> <address>        - Convert function to SSA form\n", .{});
     print("  types <file> <address>      - Infer VB6 types for function variables\n", .{});
     print("  decompile <file> <address>  - Decompile function to VB6 code\n", .{});
+    print("  project-create <proj> <bin> - Create a new project database\n", .{});
+    print("  project-open <proj>         - Open an existing project\n", .{});
+    print("  project-save <proj> <file>  - Save analysis results to project\n", .{});
     print("  help                        - Show this help\n\n", .{});
     print("Examples:\n", .{});
     print("  vbdecomp analyze app.exe\n", .{});
@@ -81,6 +87,8 @@ fn printUsage() void {
     print("  vbdecomp ssa app.exe 0x401000\n", .{});
     print("  vbdecomp types app.exe 0x401000\n", .{});
     print("  vbdecomp decompile app.exe 0x401000\n", .{});
+    print("  vbdecomp project-create myapp.vbdp myapp.exe\n", .{});
+    print("  vbdecomp project-save myapp.vbdp myapp.exe\n", .{});
 }
 
 fn parseCommand(arg: []const u8) ?Command {
@@ -96,6 +104,9 @@ fn parseCommand(arg: []const u8) ?Command {
     if (std.mem.eql(u8, arg, "ssa")) return .ssa;
     if (std.mem.eql(u8, arg, "types")) return .types;
     if (std.mem.eql(u8, arg, "decompile")) return .decompile;
+    if (std.mem.eql(u8, arg, "project-create")) return .project_create;
+    if (std.mem.eql(u8, arg, "project-open")) return .project_open;
+    if (std.mem.eql(u8, arg, "project-save")) return .project_save;
     if (std.mem.eql(u8, arg, "help")) return .help;
     return null;
 }
@@ -843,6 +854,138 @@ fn cmdDecompile(allocator: std.mem.Allocator, path: []const u8, address_str: []c
     print("\n", .{});
 }
 
+fn cmdProjectCreate(allocator: std.mem.Allocator, project_path: []const u8, binary_path: []const u8) !void {
+    const Project = @import("db/project.zig").Project;
+    const BinaryInfo = @import("db/project.zig").BinaryInfo;
+    
+    print("Creating project: {s}\n", .{project_path});
+    print("Binary: {s}\n", .{binary_path});
+    
+    var project = try Project.create(allocator, project_path, binary_path);
+    defer project.close();
+    
+    // Parse binary to get info
+    const pe_file = try pe.parseFromFile(allocator, binary_path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    const image_base = pe_file.getImageBase();
+    const entry_point = pe_file.getEntryPoint();
+    
+    // Detect VB6
+    const detection_result = vb6.detectVB6(&pe_file);
+    const is_vb6 = detection_result.is_vb6;
+    
+    // Save binary info
+    const binary_info = BinaryInfo{
+        .file_path = binary_path,
+        .file_hash = "TODO", // TODO: Implement hash
+        .image_base = image_base,
+        .entry_point = entry_point,
+        .is_vb6 = is_vb6,
+        .vb_version = if (is_vb6) "6.0" else null,
+        .compilation_type = if (is_vb6) "Native" else null,
+        .binary_type = "EXE",
+    };
+    
+    try project.saveBinaryInfo(binary_info);
+    
+    print("Project created successfully\n", .{});
+}
+
+fn cmdProjectOpen(allocator: std.mem.Allocator, project_path: []const u8) !void {
+    const Project = @import("db/project.zig").Project;
+    
+    print("Opening project: {s}\n", .{project_path});
+    
+    var project = try Project.open(allocator, project_path);
+    defer project.close();
+    
+    print("Binary: {s}\n", .{project.binary_path});
+    
+    // Load functions
+    var functions = try project.loadFunctions();
+    defer {
+        for (functions.items) |func| {
+            if (func.name) |name| allocator.free(name);
+            if (func.func_type) |ft| allocator.free(ft);
+        }
+        functions.deinit(allocator);
+    }
+    
+    print("Loaded {d} functions\n", .{functions.items.len});
+    for (functions.items) |func| {
+        const name = func.name orelse "unnamed";
+        const analyzed = if (func.is_analyzed) "analyzed" else "not analyzed";
+        print("  0x{X:0>8}: {s} ({s})\n", .{ func.address, name, analyzed });
+    }
+}
+
+fn cmdProjectSave(allocator: std.mem.Allocator, project_path: []const u8, binary_path: []const u8) !void {
+    const Project = @import("db/project.zig").Project;
+    const Function = @import("db/project.zig").Function;
+    
+    print("Saving analysis to project: {s}\n", .{project_path});
+    
+    var project = try Project.open(allocator, project_path);
+    defer project.close();
+    
+    // Parse binary
+    const pe_file = try pe.parseFromFile(allocator, binary_path);
+    defer {
+        var pf = pe_file;
+        allocator.free(pf.data);
+        pf.deinit();
+    }
+    
+    const image_base = pe_file.getImageBase();
+    const entry_point = pe_file.getEntryPoint();
+    
+    // Get code section
+    const section_data = pe_file.rvaToData(entry_point - image_base, 0x10000) orelse {
+        print("Error: Entry point is not mapped in any section\n", .{});
+        return error.InvalidAddress;
+    };
+    
+    // Build CFG to discover functions
+    var cfg = CFG.init(allocator);
+    defer cfg.deinit();
+    
+    var cfg_builder = CFGBuilder.init(allocator, &cfg, section_data, entry_point, .{});
+    defer cfg_builder.deinit();
+    
+    try cfg_builder.buildFunction(entry_point);
+    
+    // Save discovered functions
+    var func_count: usize = 0;
+    var func_iter = cfg.functions.iterator();
+    while (func_iter.next()) |entry| {
+        const func = Function{
+            .address = entry.key_ptr.*,
+            .name = null,
+            .func_type = "Sub",
+            .is_analyzed = true,
+            .is_decompiled = false,
+            .signature = null,
+            .return_type = null,
+        };
+        _ = try project.saveFunction(func);
+        func_count += 1;
+    }
+    
+    // Save cross-references
+    var xref_count: usize = 0;
+    for (cfg.xrefs.items) |xref| {
+        try project.saveXref(xref.from, xref.to, "call");
+        xref_count += 1;
+    }
+    
+    print("Saved {d} functions and {d} cross-references\n", .{ func_count, xref_count });
+}
+
 // Conditionally export main only when building an executable
 pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
     // Setup arena allocator
@@ -997,6 +1140,36 @@ pub export fn main(argc: c_int, argv: [*][*:0]u8) c_int {
                 return 1;
             }
             cmdDecompile(allocator, args[2], args[3]) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .project_create => {
+            if (args.len < 4) {
+                print("Error: project-create command requires project path and binary path\n", .{});
+                return 1;
+            }
+            cmdProjectCreate(allocator, args[2], args[3]) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .project_open => {
+            if (args.len < 3) {
+                print("Error: project-open command requires project path\n", .{});
+                return 1;
+            }
+            cmdProjectOpen(allocator, args[2]) catch |err| {
+                print("Error: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        },
+        .project_save => {
+            if (args.len < 4) {
+                print("Error: project-save command requires project path and binary path\n", .{});
+                return 1;
+            }
+            cmdProjectSave(allocator, args[2], args[3]) catch |err| {
                 print("Error: {s}\n", .{@errorName(err)});
                 return 1;
             };
