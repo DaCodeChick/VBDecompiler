@@ -284,22 +284,24 @@ git commit -m "Phase N: Description
 - ✅ Phase 7: Type Inference
 - ✅ Phase 8: High-level Code Generation (Decompiler)
 - ✅ Phase 9: SQLite Project Database
+- ✅ Phase 10: VB6-Specific Features (Runtime, Forms, Strings, COM)
 
 ## Next Steps (TODO)
 
-1. **GUI Development**: Qt-based frontend
-2. **VB6 Specifics**: Forms, controls, events, COM
-3. **P-code Bytecode**: Support VB6 P-code interpreter
-4. **Testing**: Add comprehensive unit tests
-5. **Documentation**: User guide and API reference
+1. **GUI Development**: Qt-based frontend using the C API
+2. **P-code Bytecode**: Support VB6 P-code interpreter (for P-code-compiled binaries)
+3. **Enhanced VB6 Analysis**: Event handler mapping, resource extraction improvements
+4. **Testing**: Add comprehensive unit tests for all modules
+5. **Documentation**: User guide, API reference, and GUI usage docs
 
 ## Known Issues / Limitations
 
 - Currently targets native code only (P-code bytecode TODO)
-- No VB6 runtime library analysis yet
+- VB6 runtime/COM analysis is simplified (scans binary data, not full PE import parsing)
 - No GUI yet (CLI only)
-- Decompiler output quality needs refinement
+- Decompiler output quality needs refinement with actual VB6 binaries
 - SQLite linking requires `libsqlite3-dev` package
+- Form parsing and event mapping are stubs (TODO: implement full parsing)
 
 ### SQLite Setup
 
@@ -349,12 +351,121 @@ exe.root_module.linkSystemLibrary("sqlite3", .{});
 - VB6 format: See `docs/vb6-format.md`
 - Architecture: See `docs/architecture.md`
 
+## Phase 10: VB6-Specific Features Details
+
+Phase 10 added four specialized VB6 analysis modules:
+
+### 1. Runtime Parser (`core/src/vb6/runtime_parser.zig`)
+
+- Locates VB Object Table in `.data` section
+- Parses VB runtime metadata (signature, version, DLL info)
+- Extracts VB object information (name, address, size)
+- Provides simplified runtime import detection (scans for known VB runtime DLL names)
+
+**CLI**: `vbdecomp vb6-info <file>`
+
+### 2. Form Parser (`core/src/vb6/form_parser.zig`)
+
+- Parses VB6 form structures (name, position, size)
+- Extracts control information (type, name, properties)
+- Event handler mapping (stub - TODO: implement full mapping)
+
+**Note**: Currently contains struct definitions and stubs. Full implementation pending actual VB6 binary testing.
+
+### 3. String Extractor (`core/src/vb6/string_extractor.zig`)
+
+- Extracts BSTR-format strings (length-prefixed Unicode)
+- Scans `.data` and `.rdata` sections
+- Handles VB6 string literal patterns
+- Provides RVA and section info for each string
+
+**CLI**: `vbdecomp vb6-strings <file>`
+
+### 4. COM Detector (`core/src/vb6/com_detector.zig`)
+
+- Scans for COM GUIDs (128-bit identifiers)
+- Detects VTable structures (COM interface method tables)
+- Identifies OLE/COM library usage
+- Type library detection
+- Formats GUIDs in standard `{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}` format
+
+**CLI**: `vbdecomp vb6-com <file>`
+
+### Technical Notes for Phase 10
+
+#### PE Parser Access Pattern
+
+VB6 modules need to access PE sections. The pattern used:
+
+```zig
+// In each VB6 module, add a local helper:
+fn getSectionByName(self: *const Self, name: []const u8) ?*const pe.headers.SectionHeader {
+    for (self.pe_file.sections) |*section| {
+        const section_name = section.getName();
+        if (std.mem.eql(u8, section_name, name)) {
+            return section;
+        }
+    }
+    return null;
+}
+
+// Then use rvaToData to access section content:
+const section = self.getSectionByName(".data") orelse return error.SectionNotFound;
+const data = self.pe_file.rvaToData(section.virtual_address, section.size_of_raw_data) orelse return error.InvalidRVA;
+```
+
+#### GUID Structure
+
+**Important**: Use `extern struct`, not `packed struct` for GUID:
+
+```zig
+// ✅ CORRECT
+pub const GUID = extern struct {
+    data1: u32,
+    data2: u16,
+    data3: u16,
+    data4: [8]u8,  // Arrays not allowed in packed struct in Zig 0.16
+};
+```
+
+#### ArrayList Mutability
+
+When calling `deinit()` on ArrayList, it must be mutable:
+
+```zig
+// ✅ CORRECT
+var guids = try self.findGUIDs();
+defer guids.deinit(allocator);
+
+// ❌ WRONG
+const guids = try self.findGUIDs();
+defer guids.deinit(allocator);  // Error: expected *T, found *const T
+```
+
+#### Simplified Import Detection
+
+Current implementation scans binary data for known DLL names instead of parsing PE import directory:
+
+```zig
+fn hasOLEImports(self: *Self) !bool {
+    const ole_dlls = [_][]const u8{ "OLEAUT32.DLL", "OLE32.DLL", "OLEPRO32.DLL" };
+    for (ole_dlls) |ole_dll| {
+        if (std.mem.indexOf(u8, self.pe_file.data, ole_dll) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+**TODO**: Implement full PE import directory parsing for more accurate analysis.
+
 ## Contact / Feedback
 
 Report issues: https://github.com/anomalyco/opencode
 
 ---
 
-**Last Updated**: Phase 9 completion (SQLite Project Database)  
+**Last Updated**: Phase 10 completion (VB6-Specific Features)  
 **Zig Version**: 0.16.0  
 **Status**: Active development
