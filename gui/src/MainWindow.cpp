@@ -122,12 +122,23 @@ void MainWindow::onActionAnalyze() {
     // Perform analysis using C API
     vbdecomp_info_t info;
     if (vbdecomp_get_info(ctx, &info)) {
-        updateFunctionList();
-        updateSectionsList();
-        updateStringsList();
         updateBinaryInfo();
+        updateSectionsList();
+        updateFunctionList();
+        updateStringsList();
+        
         updateStatusBar("Analysis complete");
-        QMessageBox::information(this, "Analysis Complete", "Binary analysis completed successfully.");
+        
+        QString msg = QString("Analysis complete!\n\n");
+        msg += QString("VB Binary: %1\n").arg(info.is_vb ? "Yes" : "No");
+        msg += QString("Sections loaded: %1\n").arg(vbdecomp_get_section_count(ctx));
+        msg += QString("Functions: %1\n").arg(vbdecomp_get_function_count(ctx));
+        msg += QString("Strings: %1\n").arg(vbdecomp_get_string_count(ctx));
+        
+        QMessageBox::information(this, "Analysis Complete", msg);
+        
+        // Switch to Binary Info tab to show results
+        ui->rightTabs->setCurrentWidget(ui->infoTab);
     } else {
         updateStatusBar("Analysis failed");
         QMessageBox::critical(this, "Analysis Failed", "Failed to analyze the binary file.");
@@ -310,6 +321,14 @@ void MainWindow::loadBinaryFile(const QString &filePath) {
     ui->actionAnalyze->setEnabled(true);
     ui->actionClose->setEnabled(true);
     ui->actionSaveProject->setEnabled(true);
+    
+    // Automatically populate basic info (binary info and sections)
+    updateBinaryInfo();
+    updateSectionsList();
+    
+    // Switch to the info tab to show results
+    ui->rightTabs->setCurrentWidget(ui->infoTab);
+    ui->leftTabs->setCurrentWidget(ui->sectionsTab);
 }
 
 void MainWindow::closeBinaryFile() {
@@ -344,14 +363,50 @@ void MainWindow::closeBinaryFile() {
 void MainWindow::updateBinaryInfo() {
     if (!ctx) return;
 
-    // TODO: Use C API to get binary info
-    QString info = "Binary Information\n";
-    info += "==================\n\n";
-    info += "File: " + currentFilePath + "\n";
-    info += "Type: PE Executable\n";
-    // Add more info as available from C API
+    vbdecomp_info_t info;
+    QString infoText = "Binary Information\n";
+    infoText += "==================\n\n";
+    infoText += "File: " + currentFilePath + "\n\n";
 
-    ui->binaryInfoView->setPlainText(info);
+    if (vbdecomp_get_info(ctx, &info)) {
+        infoText += QString("VB Binary: %1\n").arg(info.is_vb ? "Yes" : "No");
+        
+        if (info.is_vb) {
+            infoText += QString("VB Version: %1\n").arg(info.vb_version);
+            
+            QString compType = "Unknown";
+            if (info.compilation_type == VBDECOMP_COMPILE_NATIVE) {
+                compType = "Native Code";
+            } else if (info.compilation_type == VBDECOMP_COMPILE_PCODE) {
+                compType = "P-Code";
+            }
+            infoText += QString("Compilation Type: %1\n").arg(compType);
+            
+            QString binType = "Unknown";
+            if (info.binary_type == VBDECOMP_BINARY_EXE) {
+                binType = "EXE";
+            } else if (info.binary_type == VBDECOMP_BINARY_DLL) {
+                binType = "DLL";
+            } else if (info.binary_type == VBDECOMP_BINARY_OCX) {
+                binType = "OCX";
+            }
+            infoText += QString("Binary Type: %1\n").arg(binType);
+            
+            infoText += QString("Has Forms: %1\n").arg(info.has_forms ? "Yes" : "No");
+            
+            if (info.runtime_dll) {
+                infoText += QString("Runtime DLL: %1\n").arg(info.runtime_dll);
+            }
+        }
+        
+        infoText += QString("\nEntry Point: 0x%1\n").arg(info.entry_point, 8, 16, QChar('0'));
+        infoText += QString("Image Base: 0x%1\n").arg(info.image_base, 8, 16, QChar('0'));
+        infoText += QString("Image Size: %1 bytes\n").arg(info.image_size);
+    } else {
+        infoText += "\nFailed to retrieve binary information.\n";
+    }
+
+    ui->binaryInfoView->setPlainText(infoText);
 }
 
 void MainWindow::updateFunctionList() {
@@ -359,9 +414,33 @@ void MainWindow::updateFunctionList() {
 
     ui->functionList->clear();
 
-    // TODO: Use C API to get function list
-    // For now, placeholder
-    updateStatusBar("Updated function list");
+    size_t function_count = vbdecomp_get_function_count(ctx);
+    
+    for (size_t i = 0; i < function_count; i++) {
+        vbdecomp_function_t func;
+        if (vbdecomp_get_function(ctx, i, &func)) {
+            QTreeWidgetItem *item = new QTreeWidgetItem();
+            item->setText(0, QString("0x%1").arg(func.address, 8, 16, QChar('0')));
+            
+            QString name = func.name ? QString::fromUtf8(func.name) : QString("sub_%1").arg(func.address, 8, 16, QChar('0'));
+            if (func.is_export) {
+                name += " [export]";
+            }
+            if (func.is_thunk) {
+                name += " [thunk]";
+            }
+            item->setText(1, name);
+            item->setText(2, QString::number(func.size));
+            
+            ui->functionList->addTopLevelItem(item);
+        }
+    }
+    
+    ui->functionList->resizeColumnToContents(0);
+    ui->functionList->resizeColumnToContents(1);
+    ui->functionList->resizeColumnToContents(2);
+    
+    updateStatusBar(QString("Loaded %1 functions").arg(function_count));
 }
 
 void MainWindow::updateSectionsList() {
@@ -369,8 +448,24 @@ void MainWindow::updateSectionsList() {
 
     ui->sectionsList->clear();
 
-    // TODO: Use C API to get sections
-    updateStatusBar("Updated sections list");
+    size_t section_count = vbdecomp_get_section_count(ctx);
+    
+    for (size_t i = 0; i < section_count; i++) {
+        vbdecomp_section_t section;
+        if (vbdecomp_get_section(ctx, i, &section)) {
+            QTreeWidgetItem *item = new QTreeWidgetItem();
+            item->setText(0, QString::fromUtf8(section.name));
+            item->setText(1, QString("0x%1").arg(section.virtual_address, 8, 16, QChar('0')));
+            item->setText(2, QString::number(section.virtual_size));
+            ui->sectionsList->addTopLevelItem(item);
+        }
+    }
+    
+    ui->sectionsList->resizeColumnToContents(0);
+    ui->sectionsList->resizeColumnToContents(1);
+    ui->sectionsList->resizeColumnToContents(2);
+    
+    updateStatusBar(QString("Loaded %1 sections").arg(section_count));
 }
 
 void MainWindow::updateStringsList() {
@@ -378,33 +473,64 @@ void MainWindow::updateStringsList() {
 
     ui->stringsList->clear();
 
-    // TODO: Use C API to get strings
-    updateStatusBar("Updated strings list");
+    size_t string_count = vbdecomp_get_string_count(ctx);
+    
+    for (size_t i = 0; i < string_count; i++) {
+        vbdecomp_string_t str;
+        if (vbdecomp_get_string(ctx, i, &str)) {
+            QString text = QString("0x%1: %2")
+                .arg(str.address, 8, 16, QChar('0'))
+                .arg(QString::fromUtf8(str.value));
+            
+            QListWidgetItem *item = new QListWidgetItem(text);
+            ui->stringsList->addItem(item);
+        }
+    }
+    
+    updateStatusBar(QString("Loaded %1 strings").arg(string_count));
 }
 
 void MainWindow::showDisassemblyAt(uint32_t address) {
     if (!ctx) return;
 
-    // TODO: Use C API to get disassembly
-    QString disasm = QString("Disassembly at 0x%1\n").arg(address, 8, 16, QChar('0'));
-    disasm += "====================\n\n";
-    disasm += "; Function code here\n";
-
-    ui->disassemblyView->setPlainText(disasm);
-    updateStatusBar(QString("Showing disassembly at 0x%1").arg(address, 8, 16, QChar('0')));
+    // Try to disassemble at the given address
+    char* disasm_result = vbdecomp_disassemble(ctx, address, 50); // 50 instructions
+    
+    if (disasm_result) {
+        ui->disassemblyView->setPlainText(QString::fromUtf8(disasm_result));
+        vbdecomp_free_string(disasm_result);
+        updateStatusBar(QString("Showing disassembly at 0x%1").arg(address, 8, 16, QChar('0')));
+    } else {
+        QString disasm = QString("Disassembly at 0x%1\n").arg(address, 8, 16, QChar('0'));
+        disasm += "====================\n\n";
+        disasm += "Unable to disassemble at this address.\n";
+        disasm += "The address may be invalid or not executable code.\n";
+        ui->disassemblyView->setPlainText(disasm);
+        updateStatusBar("Failed to disassemble");
+    }
 }
 
 void MainWindow::showDecompilerOutput(uint32_t address) {
     if (!ctx) return;
 
-    // TODO: Use C API to get decompiled output
-    QString output = QString("Decompiled function at 0x%1\n").arg(address, 8, 16, QChar('0'));
-    output += "============================\n\n";
-    output += "' VB6 pseudo-code here\n";
-
-    ui->decompilerView->setPlainText(output);
+    // Try to decompile the function at the given address
+    char* decompile_result = vbdecomp_decompile(ctx, address);
+    
+    if (decompile_result) {
+        ui->decompilerView->setPlainText(QString::fromUtf8(decompile_result));
+        vbdecomp_free_string(decompile_result);
+        updateStatusBar(QString("Decompiled function at 0x%1").arg(address, 8, 16, QChar('0')));
+    } else {
+        QString output = QString("Decompiled function at 0x%1\n").arg(address, 8, 16, QChar('0'));
+        output += "============================\n\n";
+        output += "' Unable to decompile function.\n";
+        output += "' The function may not have been analyzed yet.\n";
+        output += "' Try clicking Analysis -> Analyze Binary first.\n";
+        ui->decompilerView->setPlainText(output);
+        updateStatusBar("Decompilation not available");
+    }
+    
     ui->rightTabs->setCurrentWidget(ui->decompilerTab);
-    updateStatusBar(QString("Decompiled function at 0x%1").arg(address, 8, 16, QChar('0')));
 }
 
 void MainWindow::showXRefsFor(uint32_t address) {
@@ -412,19 +538,85 @@ void MainWindow::showXRefsFor(uint32_t address) {
 
     ui->xrefsList->clear();
 
-    // TODO: Use C API to get cross-references
-    updateStatusBar(QString("Showing xrefs for 0x%1").arg(address, 8, 16, QChar('0')));
+    // Get cross-references TO this address
+    uint32_t xrefs_to[256];
+    size_t xrefs_to_count = vbdecomp_get_xrefs_to(ctx, address, xrefs_to, 256);
+    
+    for (size_t i = 0; i < xrefs_to_count; i++) {
+        QTreeWidgetItem *item = new QTreeWidgetItem();
+        item->setText(0, QString("0x%1").arg(xrefs_to[i], 8, 16, QChar('0')));
+        item->setText(1, QString("0x%1").arg(address, 8, 16, QChar('0')));
+        item->setText(2, "Call/Jump To");
+        ui->xrefsList->addTopLevelItem(item);
+    }
+    
+    // Get cross-references FROM this address
+    uint32_t xrefs_from[256];
+    size_t xrefs_from_count = vbdecomp_get_xrefs_from(ctx, address, xrefs_from, 256);
+    
+    for (size_t i = 0; i < xrefs_from_count; i++) {
+        QTreeWidgetItem *item = new QTreeWidgetItem();
+        item->setText(0, QString("0x%1").arg(address, 8, 16, QChar('0')));
+        item->setText(1, QString("0x%1").arg(xrefs_from[i], 8, 16, QChar('0')));
+        item->setText(2, "Call/Jump From");
+        ui->xrefsList->addTopLevelItem(item);
+    }
+    
+    ui->xrefsList->resizeColumnToContents(0);
+    ui->xrefsList->resizeColumnToContents(1);
+    ui->xrefsList->resizeColumnToContents(2);
+    
+    size_t total = xrefs_to_count + xrefs_from_count;
+    updateStatusBar(QString("Found %1 cross-references for 0x%2").arg(total).arg(address, 8, 16, QChar('0')));
 }
 
 void MainWindow::showHexViewAt(uint32_t address) {
     if (!ctx) return;
 
-    // TODO: Use C API to get raw bytes and format as hex dump
-    QString hexDump = QString("Hex view at 0x%1\n").arg(address, 8, 16, QChar('0'));
-    hexDump += "===================\n\n";
-
+    // Read 512 bytes from the address
+    uint8_t buffer[512];
+    size_t bytes_read = vbdecomp_read_bytes(ctx, address, buffer, sizeof(buffer));
+    
+    if (bytes_read == 0) {
+        QString hexDump = QString("Hex view at 0x%1\n").arg(address, 8, 16, QChar('0'));
+        hexDump += "===================\n\n";
+        hexDump += "Unable to read bytes at this address.\n";
+        ui->hexView->setPlainText(hexDump);
+        updateStatusBar("Failed to read memory");
+        return;
+    }
+    
+    // Format as hex dump (16 bytes per line)
+    QString hexDump;
+    for (size_t i = 0; i < bytes_read; i += 16) {
+        // Address
+        hexDump += QString("%1  ").arg(address + i, 8, 16, QChar('0'));
+        
+        // Hex bytes
+        QString ascii;
+        for (size_t j = 0; j < 16 && (i + j) < bytes_read; j++) {
+            uint8_t byte = buffer[i + j];
+            hexDump += QString("%1 ").arg(byte, 2, 16, QChar('0'));
+            
+            // ASCII representation
+            if (byte >= 32 && byte <= 126) {
+                ascii += QChar(byte);
+            } else {
+                ascii += '.';
+            }
+        }
+        
+        // Padding if less than 16 bytes
+        size_t remaining = 16 - qMin(size_t(16), bytes_read - i);
+        for (size_t j = 0; j < remaining; j++) {
+            hexDump += "   ";
+        }
+        
+        hexDump += " |" + ascii + "|\n";
+    }
+    
     ui->hexView->setPlainText(hexDump);
-    updateStatusBar(QString("Showing hex at 0x%1").arg(address, 8, 16, QChar('0')));
+    updateStatusBar(QString("Showing %1 bytes at 0x%2").arg(bytes_read).arg(address, 8, 16, QChar('0')));
 }
 
 void MainWindow::updateStatusBar(const QString &message) {

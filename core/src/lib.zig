@@ -35,6 +35,8 @@ pub const Context = struct {
     detection_result: vb6.DetectionResult,
     last_error: ?[]const u8,
     cfg: ?CFG,
+    functions_cache: ?std.ArrayList(FunctionInfo),
+    strings_cache: ?std.ArrayList(StringInfo),
     
     pub fn deinit(self: *Context) void {
         if (self.last_error) |err| {
@@ -44,9 +46,39 @@ pub const Context = struct {
             var cfg_mut = cfg_val.*;
             cfg_mut.deinit();
         }
+        if (self.functions_cache) |*cache| {
+            for (cache.items) |*item| {
+                if (item.name) |name| {
+                    self.allocator.free(name);
+                }
+            }
+            cache.deinit(self.allocator);
+        }
+        if (self.strings_cache) |*cache| {
+            for (cache.items) |*item| {
+                self.allocator.free(item.value);
+            }
+            cache.deinit(self.allocator);
+        }
         self.allocator.free(self.pe_file.data);
         self.pe_file.deinit();
     }
+};
+
+// Cached function info
+const FunctionInfo = struct {
+    address: u32,
+    size: u32,
+    name: ?[]const u8,
+    is_export: bool,
+    is_thunk: bool,
+};
+
+// Cached string info
+const StringInfo = struct {
+    address: u32,
+    value: []const u8,
+    length: usize,
 };
 
 // Global allocator for library - using arena wrapped around page allocator
@@ -95,6 +127,8 @@ export fn vbdecomp_open(path: [*:0]const u8) ?*Context {
         .detection_result = detection_result,
         .last_error = null,
         .cfg = null,
+        .functions_cache = null,
+        .strings_cache = null,
     };
     
     return ctx;
@@ -128,6 +162,8 @@ export fn vbdecomp_open_memory(data: [*]const u8, size: usize) ?*Context {
         .detection_result = detection_result,
         .last_error = null,
         .cfg = null,
+        .functions_cache = null,
+        .strings_cache = null,
     };
     
     return ctx;
@@ -266,28 +302,144 @@ export fn vbdecomp_get_export(ctx: ?*Context, index: usize, exp: ?*anyopaque) bo
     return false; // TODO: Implement
 }
 
+// C struct for string info
+const StringStruct = extern struct {
+    address: u32,
+    value: [*:0]const u8,
+    length: usize,
+};
+
 export fn vbdecomp_get_string_count(ctx: ?*Context) usize {
-    _ = ctx;
-    return 0; // TODO: Implement string extraction
+    const c = ctx orelse return 0;
+    
+    // Build cache if needed
+    if (c.strings_cache == null) {
+        c.strings_cache = .empty;
+        
+        // Scan .rdata and .data sections for printable ASCII strings
+        for (c.pe_file.sections) |*section| {
+            const section_name = section.getName();
+            if (std.mem.eql(u8, section_name, ".rdata") or 
+                std.mem.eql(u8, section_name, ".data")) {
+                const section_rva = section.virtual_address;
+                const section_size = section.size_of_raw_data;
+                const data = c.pe_file.rvaToData(section_rva, section_size) orelse continue;
+                
+                // Simple string scanner - look for sequences of printable ASCII
+                var i: usize = 0;
+                while (i < data.len) {
+                    if (data[i] >= 32 and data[i] <= 126) {
+                        // Start of potential string
+                        const start = i;
+                        var len: usize = 0;
+                        while (i < data.len and data[i] >= 32 and data[i] <= 126) {
+                            len += 1;
+                            i += 1;
+                        }
+                        
+                        // Only keep strings >= 4 characters
+                        if (len >= 4 and i < data.len and data[i] == 0) {
+                            const str_data = data[start..start+len];
+                            const str_copy = allocator.dupe(u8, str_data) catch continue;
+                            c.strings_cache.?.append(allocator, StringInfo{
+                                .address = section_rva + @as(u32, @intCast(start)),
+                                .value = str_copy,
+                                .length = len,
+                            }) catch {};
+                        }
+                    }
+                    i += 1;
+                }
+            }
+        }
+    }
+    
+    return if (c.strings_cache) |cache| cache.items.len else 0;
 }
 
-export fn vbdecomp_get_string(ctx: ?*Context, index: usize, str: ?*anyopaque) bool {
-    _ = ctx;
-    _ = index;
-    _ = str;
-    return false; // TODO: Implement
+export fn vbdecomp_get_string(ctx: ?*Context, index: usize, str: ?*StringStruct) bool {
+    const c = ctx orelse return false;
+    const s = str orelse return false;
+    const cache = c.strings_cache orelse return false;
+    
+    if (index >= cache.items.len) return false;
+    
+    const info = cache.items[index];
+    s.* = StringStruct{
+        .address = info.address,
+        .value = @ptrCast(info.value.ptr),
+        .length = info.length,
+    };
+    
+    return true;
 }
+
+// C struct for function info
+const FunctionStruct = extern struct {
+    address: u32,
+    size: u32,
+    name: ?[*:0]const u8,
+    is_export: bool,
+    is_thunk: bool,
+};
 
 export fn vbdecomp_get_function_count(ctx: ?*Context) usize {
-    _ = ctx;
-    return 0; // TODO: Implement function detection
+    const c = ctx orelse return 0;
+    
+    // Build cache if needed
+    if (c.functions_cache == null) {
+        c.functions_cache = .empty;
+        
+        // Add entry point as a function
+        const entry_rva = c.pe_file.getEntryPoint();
+        if (entry_rva != 0) {
+            const entry_addr = entry_rva;
+            c.functions_cache.?.append(allocator, FunctionInfo{
+                .address = entry_addr,
+                .size = 0,
+                .name = allocator.dupe(u8, "EntryPoint") catch null,
+                .is_export = false,
+                .is_thunk = false,
+            }) catch {};
+        }
+        
+        // If CFG was built, add functions from it
+        if (c.cfg) |cfg| {
+            var iter = cfg.functions.iterator();
+            while (iter.next()) |entry| {
+                const func = entry.value_ptr.*;
+                const name_copy = if (func.name) |n| allocator.dupe(u8, n) catch null else null;
+                c.functions_cache.?.append(allocator, FunctionInfo{
+                    .address = func.address,
+                    .size = func.size,
+                    .name = name_copy,
+                    .is_export = func.is_export,
+                    .is_thunk = func.is_thunk,
+                }) catch {};
+            }
+        }
+    }
+    
+    return if (c.functions_cache) |cache| cache.items.len else 0;
 }
 
-export fn vbdecomp_get_function(ctx: ?*Context, index: usize, func: ?*anyopaque) bool {
-    _ = ctx;
-    _ = index;
-    _ = func;
-    return false; // TODO: Implement
+export fn vbdecomp_get_function(ctx: ?*Context, index: usize, func: ?*FunctionStruct) bool {
+    const c = ctx orelse return false;
+    const f = func orelse return false;
+    const cache = c.functions_cache orelse return false;
+    
+    if (index >= cache.items.len) return false;
+    
+    const info = cache.items[index];
+    f.* = FunctionStruct{
+        .address = info.address,
+        .size = info.size,
+        .name = if (info.name) |n| @ptrCast(n.ptr) else null,
+        .is_export = info.is_export,
+        .is_thunk = info.is_thunk,
+    };
+    
+    return true;
 }
 
 export fn vbdecomp_disassemble(ctx: ?*Context, address: u32, count: usize) ?[*:0]u8 {
